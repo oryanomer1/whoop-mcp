@@ -45,6 +45,8 @@ You need Node.js 20+ and a WHOOP membership.
 
 ### 2. Install
 
+Either run it straight from GitHub with `npx` (nothing to clone; `whoop-mcp` below means `npx -y github:oryanomer1/whoop-mcp`), or clone and build it (`whoop-mcp` below means `node /absolute/path/to/whoop-mcp/dist/index.js`):
+
 ```bash
 git clone https://github.com/oryanomer1/whoop-mcp.git
 cd whoop-mcp
@@ -54,13 +56,13 @@ npm install   # also builds dist/
 ### 3. Connect your WHOOP account
 
 ```bash
-WHOOP_CLIENT_ID=your-client-id WHOOP_CLIENT_SECRET=your-client-secret node dist/index.js auth
+WHOOP_CLIENT_ID=your-client-id WHOOP_CLIENT_SECRET=your-client-secret npx -y github:oryanomer1/whoop-mcp auth
 ```
 
 Your browser opens the WHOOP login page. After you approve, tokens are saved to `~/.config/whoop-mcp/tokens.json` (permissions `0600`) and refreshed automatically from then on. Check the connection at any time:
 
 ```bash
-node dist/index.js status
+npx -y github:oryanomer1/whoop-mcp status
 ```
 
 ### 4. Add it to your MCP client
@@ -68,7 +70,7 @@ node dist/index.js status
 **Claude Code**
 
 ```bash
-claude mcp add whoop --scope user -- node /absolute/path/to/whoop-mcp/dist/index.js
+claude mcp add whoop --scope user -- npx -y github:oryanomer1/whoop-mcp
 ```
 
 **Claude Desktop**: edit `claude_desktop_config.json` (Settings → Developer → Edit Config):
@@ -77,14 +79,16 @@ claude mcp add whoop --scope user -- node /absolute/path/to/whoop-mcp/dist/index
 {
   "mcpServers": {
     "whoop": {
-      "command": "node",
-      "args": ["/absolute/path/to/whoop-mcp/dist/index.js"]
+      "command": "npx",
+      "args": ["-y", "github:oryanomer1/whoop-mcp"]
     }
   }
 }
 ```
 
-**Cursor, VS Code, and other clients**: run `node /absolute/path/to/whoop-mcp/dist/index.js` as a stdio server.
+**Cursor, VS Code, and other clients**: run `npx -y github:oryanomer1/whoop-mcp` as a stdio server.
+
+If you cloned the repo, use `node /absolute/path/to/whoop-mcp/dist/index.js` in place of `npx -y github:oryanomer1/whoop-mcp`.
 
 No environment variables are needed in the client config: the client ID and secret are saved with your tokens during `auth`.
 
