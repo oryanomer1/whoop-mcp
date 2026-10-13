@@ -45,7 +45,7 @@ You need Node.js 20+ and a WHOOP membership.
 
 ### 2. Install
 
-Either run it straight from GitHub with `npx` (nothing to clone; `whoop-mcp` below means `npx -y github:oryanomer1/whoop-mcp`), or clone and build it (`whoop-mcp` below means `node /absolute/path/to/whoop-mcp/dist/index.js`):
+Nothing to install: the commands below run it straight from GitHub with `npx`. If you'd rather have a local copy, clone and build it, then use `node /absolute/path/to/whoop-mcp/dist/index.js` wherever this README says `npx -y github:oryanomer1/whoop-mcp`:
 
 ```bash
 git clone https://github.com/oryanomer1/whoop-mcp.git
@@ -87,8 +87,6 @@ claude mcp add whoop --scope user -- npx -y github:oryanomer1/whoop-mcp
 ```
 
 **Cursor, VS Code, and other clients**: run `npx -y github:oryanomer1/whoop-mcp` as a stdio server.
-
-If you cloned the repo, use `node /absolute/path/to/whoop-mcp/dist/index.js` in place of `npx -y github:oryanomer1/whoop-mcp`.
 
 No environment variables are needed in the client config: the client ID and secret are saved with your tokens during `auth`.
 
