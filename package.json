@@ -1,0 +1,50 @@
+{
+  "name": "whoop-mcp",
+  "version": "0.1.0",
+  "description": "Read-only MCP server for your WHOOP data: recovery, sleep, strain, workouts and trends.",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "whoop",
+    "claude",
+    "health",
+    "fitness",
+    "hrv",
+    "sleep"
+  ],
+  "homepage": "https://github.com/oryanomer1/whoop-mcp#readme",
+  "bugs": "https://github.com/oryanomer1/whoop-mcp/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/oryanomer1/whoop-mcp.git"
+  },
+  "license": "MIT",
+  "author": "Oryan Omer",
+  "type": "module",
+  "bin": {
+    "whoop-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20.11"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && chmod +x dist/index.js",
+    "prepare": "npm run build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "start": "node dist/index.js",
+    "inspect": "npx @modelcontextprotocol/inspector node dist/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.11"
+  }
+}
