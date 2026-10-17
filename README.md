@@ -3,6 +3,7 @@
 [![npm](https://img.shields.io/npm/v/@oryanomer/whoop-mcp)](https://www.npmjs.com/package/@oryanomer/whoop-mcp)
 [![CI](https://github.com/oryanomer1/whoop-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/oryanomer1/whoop-mcp/actions/workflows/ci.yml)
 [![M8ven Score](https://m8ven.ai/badge/mcp/oryanomer1-whoop-mcp-1mdowe?v=6c1b13612c233c67d4fba7e0f8d10624)](https://m8ven.ai/mcp/oryanomer1-whoop-mcp-1mdowe?s=readme)
+[![whoop-mcp MCP server – quality and maintenance score on Glama](https://glama.ai/mcp/servers/oryanomer1/whoop-mcp/badges/score.svg)](https://glama.ai/mcp/servers/oryanomer1/whoop-mcp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 Ask Claude, Cursor, VS Code or any [MCP](https://modelcontextprotocol.io) client about your [WHOOP](https://www.whoop.com) recovery, HRV, sleep, strain and workouts, without giving it any way to change your data.
