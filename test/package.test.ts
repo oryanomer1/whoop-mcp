@@ -44,6 +44,32 @@ describe("npm package", () => {
   });
 });
 
+describe("Claude Code plugin", () => {
+  const read = (file: string) => readFileSync(join(root, file), "utf8");
+  const plugin = JSON.parse(read("plugin/.claude-plugin/plugin.json"));
+  const marketplace = JSON.parse(read(".claude-plugin/marketplace.json"));
+  const mcp = JSON.parse(read("plugin/.mcp.json"));
+  const spec = `${pkg.name}@${pkg.version}`;
+
+  it("runs exactly the npm version being released", () => {
+    expect(mcp.mcpServers.whoop).toEqual({ command: "npx", args: ["-y", spec] });
+    expect(plugin.version).toBe(pkg.version);
+    expect(marketplace.metadata.version).toBe(pkg.version);
+    expect(marketplace.plugins.map((p: { version: string }) => p.version)).toEqual([pkg.version]);
+  });
+
+  it("tells users to run the same pinned version in the auth skill", () => {
+    const pinned = [...read("plugin/skills/auth/SKILL.md").matchAll(/@oryanomer\/whoop-mcp@[^\s`]+/g)].map((m) => m[0]);
+    expect(pinned.length).toBeGreaterThan(0);
+    expect(new Set(pinned)).toEqual(new Set([`@${spec.slice(1)}`]));
+  });
+
+  it("lists the plugin from this repository's plugin folder", () => {
+    expect(marketplace.plugins).toEqual([expect.objectContaining({ name: plugin.name, source: "./plugin" })]);
+    expect(plugin.license).toBe(pkg.license);
+  });
+});
+
 describe("MCPB bundle manifest", () => {
   const manifest = JSON.parse(readFileSync(join(root, "mcpb", "manifest.json"), "utf8"));
 

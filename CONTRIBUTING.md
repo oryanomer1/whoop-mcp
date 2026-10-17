@@ -41,7 +41,7 @@ By submitting a contribution, you agree that it is licensed under the project's 
 ## Releasing (maintainers)
 
 1. Update `CHANGELOG.md`.
-2. Run `npm version <patch|minor|major>`. This bumps `package.json` and `server.json` together and creates a `vX.Y.Z` tag.
+2. Run `npm version <patch|minor|major>`. This bumps `package.json`, `server.json` and the Claude Code plugin (`plugin/` and `.claude-plugin/marketplace.json`) together, and creates a `vX.Y.Z` tag.
 3. Run `git push --follow-tags`. The Release workflow tests the code, publishes to npm with provenance, publishes to the MCP Registry, and creates the GitHub release with the `.mcpb` bundle attached.
 
 Build the bundles locally with `npm run bundle`. This writes `build/whoop-mcp-<version>.mcpb` (standard, for Claude Desktop) and `build/whoop-mcp-<version>-smithery.mcpb` (with full tool schemas, which Smithery requires). To update the Smithery listing after a release:

@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "whoop": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@oryanomer/whoop-mcp@1.0.3"
+      ]
+    }
+  }
+}

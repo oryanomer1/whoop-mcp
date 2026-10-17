@@ -61,9 +61,20 @@ By connecting, you agree to the [Terms of Use (EULA)](EULA.md) and to WHOOP's [A
 <details open>
 <summary><b>Claude Code</b></summary>
 
+**As a plugin (recommended).** Adds the server plus a `/whoop:auth` skill that walks you through connecting:
+
+```text
+/plugin marketplace add oryanomer1/whoop-mcp
+/plugin install whoop@whoop-mcp
+```
+
+**Or just the MCP server:**
+
 ```bash
 claude mcp add whoop --scope user -- npx -y @oryanomer/whoop-mcp
 ```
+
+Use one or the other, not both, or you'll see every tool twice.
 </details>
 
 <details>

@@ -1,0 +1,27 @@
+{
+  "name": "whoop-mcp",
+  "owner": {
+    "name": "Oryan Omer",
+    "email": "oryandrive@gmail.com"
+  },
+  "metadata": {
+    "description": "Read-only WHOOP data (recovery, HRV, sleep, strain, workouts) for Claude Code.",
+    "version": "1.0.3"
+  },
+  "plugins": [
+    {
+      "name": "whoop",
+      "source": "./plugin",
+      "description": "Ask Claude about your WHOOP recovery, HRV, sleep, strain, workouts and trends. Read-only by design.",
+      "version": "1.0.3",
+      "tags": [
+        "whoop",
+        "health",
+        "fitness",
+        "sleep",
+        "hrv",
+        "read-only"
+      ]
+    }
+  ]
+}

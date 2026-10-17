@@ -1,0 +1,24 @@
+{
+  "name": "whoop",
+  "version": "1.0.3",
+  "description": "Ask Claude about your WHOOP recovery, HRV, sleep, strain, workouts and trends. Read-only by design: it can never change your WHOOP data.",
+  "author": {
+    "name": "Oryan Omer",
+    "email": "oryandrive@gmail.com",
+    "url": "https://github.com/oryanomer1"
+  },
+  "homepage": "https://github.com/oryanomer1/whoop-mcp#readme",
+  "repository": "https://github.com/oryanomer1/whoop-mcp",
+  "license": "MIT",
+  "keywords": [
+    "whoop",
+    "health",
+    "fitness",
+    "recovery",
+    "hrv",
+    "sleep",
+    "strain",
+    "wearables",
+    "read-only"
+  ]
+}

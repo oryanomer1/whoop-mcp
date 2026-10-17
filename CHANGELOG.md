@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Claude Code plugin and marketplace in this repository: `/plugin marketplace add oryanomer1/whoop-mcp`, then `/plugin install whoop@whoop-mcp`. It runs the matching npm release and adds a `/whoop:auth` skill for the one-time sign-in. `npm version` keeps the plugin pinned to each release.
+
 ## [1.0.3] - 2026-10-17
 
 ### Added
