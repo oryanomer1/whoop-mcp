@@ -8,12 +8,12 @@
     "source": "github"
   },
   "websiteUrl": "https://github.com/oryanomer1/whoop-mcp#readme",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "@oryanomer/whoop-mcp",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "transport": {
         "type": "stdio"
       }
