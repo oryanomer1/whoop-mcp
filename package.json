@@ -1,6 +1,6 @@
 {
   "name": "@oryanomer/whoop-mcp",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Read-only MCP server for your WHOOP data: recovery, HRV, sleep, strain, workouts and trends.",
   "keywords": [
     "mcp",
