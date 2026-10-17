@@ -38,4 +38,6 @@ To try your changes against your own WHOOP account, connect once with `node dist
 
 1. Update `CHANGELOG.md`.
 2. Run `npm version <patch|minor|major>`. This bumps `package.json` and `server.json` together and creates a `vX.Y.Z` tag.
-3. Run `git push --follow-tags`. The Release workflow tests the code, publishes to npm with provenance, publishes to the MCP Registry, and creates the GitHub release.
+3. Run `git push --follow-tags`. The Release workflow tests the code, publishes to npm with provenance, publishes to the MCP Registry, and creates the GitHub release with the `.mcpb` bundle attached.
+
+Build the bundle locally with `npm run bundle` (output: `build/whoop-mcp-<version>.mcpb`).

@@ -11,6 +11,7 @@ First generally available release, published to npm as `@oryanomer1/whoop-mcp` a
 - Ten read-only MCP tools over the WHOOP Developer API v2: `get_daily_overview`, `get_trends`, `get_profile`, `list_cycles`, `get_cycle`, `list_recoveries`, `list_sleeps`, `get_sleep`, `list_workouts`, `get_workout`.
 - Compact summaries in friendly units and local times, with `raw: true` for WHOOP's original objects.
 - `whoop-mcp auth`, `status` and `logout` commands, using an OAuth authorization-code flow with a loopback callback (or paste-the-URL for non-local redirect URIs).
+- A one-click `.mcpb` bundle for Claude Desktop (and Smithery), attached to each GitHub release; a Dockerfile for container use and directory checks.
 - `auth` asks for the client ID and secret interactively (the secret is not echoed), or reads `WHOOP_CLIENT_ID` / `WHOOP_CLIENT_SECRET`.
 - Automatic token refresh that handles WHOOP's rotating refresh tokens safely: single-flight within a process, a lock file across processes, atomic writes, and in-memory fallback if a write fails.
 - Automatic, bounded pagination, plus retries for rate limits (429, honouring `Retry-After`), server errors, timeouts and network errors. Requests time out after 30s and stop when the client cancels the tool call.

@@ -61,7 +61,9 @@ claude mcp add whoop --scope user -- npx -y @oryanomer1/whoop-mcp
 <details>
 <summary><b>Claude Desktop</b></summary>
 
-Open Settings → Developer → Edit Config, and add:
+**One click:** download `whoop-mcp-<version>.mcpb` from the [latest release](https://github.com/oryanomer1/whoop-mcp/releases/latest) and double-click it (or drag it onto Claude Desktop's Settings → Extensions page).
+
+**Or by hand:** open Settings → Developer → Edit Config, and add:
 
 ```json
 {

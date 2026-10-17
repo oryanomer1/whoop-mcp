@@ -1,0 +1,49 @@
+{
+  "manifest_version": "0.3",
+  "name": "whoop-mcp",
+  "display_name": "WHOOP (read-only)",
+  "version": "0.0.0",
+  "description": "Read-only access to your WHOOP recovery, HRV, sleep, strain, workouts and trends.",
+  "long_description": "Ask about your WHOOP recovery, HRV, sleep, strain and workouts. Everything is **read-only**: only WHOOP's `read:*` scopes are requested, and the server can only send GET requests.\n\n**One-time setup**\n\n1. Create a WHOOP developer app at https://developer-dashboard.whoop.com/apps/create with all `read:*` scopes and the redirect URI `http://localhost:8787/callback`.\n2. In a terminal, run `npx -y @oryanomer1/whoop-mcp auth` and paste the app's Client ID and Secret. Approve access in your browser.\n3. Install this extension. It reads the tokens saved in step 2 and refreshes them automatically.\n\nTokens stay on your computer, and data is fetched only from WHOOP's official API. Full documentation: https://github.com/oryanomer1/whoop-mcp",
+  "author": {
+    "name": "Oryan Omer",
+    "url": "https://github.com/oryanomer1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/oryanomer1/whoop-mcp"
+  },
+  "homepage": "https://github.com/oryanomer1/whoop-mcp",
+  "documentation": "https://github.com/oryanomer1/whoop-mcp#readme",
+  "support": "https://github.com/oryanomer1/whoop-mcp/issues",
+  "license": "MIT",
+  "keywords": ["whoop", "health", "fitness", "recovery", "hrv", "sleep", "strain", "wearables", "read-only"],
+  "privacy_policies": ["https://www.whoop.com/privacy/full-privacy-policy/"],
+  "server": {
+    "type": "node",
+    "entry_point": "dist/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/dist/index.js"],
+      "env": {}
+    }
+  },
+  "tools": [
+    { "name": "get_daily_overview", "description": "One day's recovery, sleep, naps, strain, calories and workouts." },
+    { "name": "get_trends", "description": "Day-by-day table and averages over the last 1-90 days." },
+    { "name": "get_profile", "description": "Profile and body measurements." },
+    { "name": "list_cycles", "description": "Physiological days with strain, calories, heart rate and steps." },
+    { "name": "get_cycle", "description": "One cycle with its recovery and sleep." },
+    { "name": "list_recoveries", "description": "Recovery scores with HRV, resting heart rate, SpO2 and skin temperature." },
+    { "name": "list_sleeps", "description": "Sleeps and naps with performance, stages and sleep need." },
+    { "name": "get_sleep", "description": "One sleep by id." },
+    { "name": "list_workouts", "description": "Workouts with strain, heart rate, calories, distance and heart-rate zones." },
+    { "name": "get_workout", "description": "One workout by id." }
+  ],
+  "compatibility": {
+    "platforms": ["darwin", "win32", "linux"],
+    "runtimes": {
+      "node": ">=20.11.0"
+    }
+  }
+}

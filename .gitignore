@@ -6,3 +6,5 @@ coverage/
 .env.*
 tokens.json
 .DS_Store
+build/
+*.mcpb
