@@ -17,31 +17,38 @@
   "documentation": "https://github.com/oryanomer1/whoop-mcp#readme",
   "support": "https://github.com/oryanomer1/whoop-mcp/issues",
   "license": "MIT",
-  "keywords": ["whoop", "health", "fitness", "recovery", "hrv", "sleep", "strain", "wearables", "read-only"],
-  "privacy_policies": ["https://www.whoop.com/privacy/full-privacy-policy/"],
+  "keywords": [
+    "whoop",
+    "health",
+    "fitness",
+    "recovery",
+    "hrv",
+    "sleep",
+    "strain",
+    "wearables",
+    "read-only"
+  ],
+  "privacy_policies": [
+    "https://www.whoop.com/privacy/full-privacy-policy/"
+  ],
   "server": {
     "type": "node",
     "entry_point": "dist/index.js",
     "mcp_config": {
       "command": "node",
-      "args": ["${__dirname}/dist/index.js"],
+      "args": [
+        "${__dirname}/dist/index.js"
+      ],
       "env": {}
     }
   },
-  "tools": [
-    { "name": "get_daily_overview", "description": "One day's recovery, sleep, naps, strain, calories and workouts." },
-    { "name": "get_trends", "description": "Day-by-day table and averages over the last 1-90 days." },
-    { "name": "get_profile", "description": "Profile and body measurements." },
-    { "name": "list_cycles", "description": "Physiological days with strain, calories, heart rate and steps." },
-    { "name": "get_cycle", "description": "One cycle with its recovery and sleep." },
-    { "name": "list_recoveries", "description": "Recovery scores with HRV, resting heart rate, SpO2 and skin temperature." },
-    { "name": "list_sleeps", "description": "Sleeps and naps with performance, stages and sleep need." },
-    { "name": "get_sleep", "description": "One sleep by id." },
-    { "name": "list_workouts", "description": "Workouts with strain, heart rate, calories, distance and heart-rate zones." },
-    { "name": "get_workout", "description": "One workout by id." }
-  ],
+  "tools": [],
   "compatibility": {
-    "platforms": ["darwin", "win32", "linux"],
+    "platforms": [
+      "darwin",
+      "win32",
+      "linux"
+    ],
     "runtimes": {
       "node": ">=20.11.0"
     }

@@ -40,4 +40,8 @@ To try your changes against your own WHOOP account, connect once with `node dist
 2. Run `npm version <patch|minor|major>`. This bumps `package.json` and `server.json` together and creates a `vX.Y.Z` tag.
 3. Run `git push --follow-tags`. The Release workflow tests the code, publishes to npm with provenance, publishes to the MCP Registry, and creates the GitHub release with the `.mcpb` bundle attached.
 
-Build the bundle locally with `npm run bundle` (output: `build/whoop-mcp-<version>.mcpb`).
+Build the bundles locally with `npm run bundle`. This writes `build/whoop-mcp-<version>.mcpb` (standard, for Claude Desktop) and `build/whoop-mcp-<version>-smithery.mcpb` (with full tool schemas, which Smithery requires). To update the Smithery listing after a release:
+
+```bash
+npx -y @smithery/cli@4.11.1 mcp publish build/whoop-mcp-<version>-smithery.mcpb -n oryandrive/whoop-mcp
+```
