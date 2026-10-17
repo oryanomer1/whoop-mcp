@@ -8,6 +8,8 @@ Please **do not open a public issue** for security problems. Report them private
 
 Security fixes are released for the latest `1.x` version.
 
+For what data whoop-mcp accesses and where it goes, see the [Privacy Policy](PRIVACY.md).
+
 ## Security model
 
 whoop-mcp runs locally, on behalf of one person, against their own WHOOP account.

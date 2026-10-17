@@ -204,6 +204,8 @@ All commands run via `npx -y @oryanomer/whoop-mcp <command>`, or install globall
 
 ## Privacy and security
 
+Read the full **[Privacy Policy](PRIVACY.md)**. In short:
+
 - whoop-mcp talks only to `api.prod.whoop.com`. There is no telemetry and no intermediary server.
 - Tokens and your client secret live in one file that only your user can read (`0600`). They are never logged or returned by tools.
 - **Your MCP client sends tool results to its language model.** Health data you ask about is shared with that model provider under its terms, so use a client and provider you trust.
@@ -247,6 +249,10 @@ Then remove the `whoop` entry from your MCP client's config, and delete the app 
 ## Contributing
 
 Issues and pull requests are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md). The one hard rule: whoop-mcp stays read-only. Release notes are in [CHANGELOG.md](CHANGELOG.md).
+
+## Privacy policy
+
+See [PRIVACY.md](PRIVACY.md).
 
 ## Disclaimer
 
