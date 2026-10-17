@@ -60,16 +60,42 @@ jobs:
 
       # npm >= 11.5.1 supports trusted publishing (OIDC). Without it configured, NPM_TOKEN is used.
       - run: npm install -g --ignore-scripts npm@11.21.1
+      # Every publish step below skips work that's already done, so a failed release can be re-run.
       - name: Publish to npm
-        run: npm publish --provenance --access public
+        run: |
+          NAME=$(node -p 'require("./package.json").name')
+          VERSION=$(node -p 'require("./package.json").version')
+          if npm view "$NAME@$VERSION" version >/dev/null 2>&1; then
+            echo "$NAME@$VERSION is already on npm; skipping."
+          else
+            npm publish --provenance --access public
+          fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Wait until npm serves the new version
+        run: |
+          NAME=$(node -p 'require("./package.json").name')
+          VERSION=$(node -p 'require("./package.json").version')
+          for i in $(seq 1 30); do
+            npm view "$NAME@$VERSION" version >/dev/null 2>&1 && exit 0
+            sleep 10
+          done
+          echo "::error::$NAME@$VERSION is still not visible on npm after 5 minutes"
+          exit 1
 
       - name: Publish to the MCP Registry
         env:
           MCP_PUBLISHER_VERSION: "1.8.1"
           MCP_PUBLISHER_SHA256: a06c9096dcb9727c13555b6be26c7effa707b01f06a4c561ba7a3635443cf2cc
         run: |
+          NAME=$(node -p 'require("./server.json").name')
+          VERSION=$(node -p 'require("./server.json").version')
+          ENCODED=$(node -p 'encodeURIComponent(process.argv[1])' "$NAME")
+          if curl -fsS -o /dev/null "https://registry.modelcontextprotocol.io/v0.1/servers/$ENCODED/versions/$VERSION"; then
+            echo "$NAME $VERSION is already in the MCP Registry; skipping."
+            exit 0
+          fi
           curl -fsSLO "https://github.com/modelcontextprotocol/registry/releases/download/v${MCP_PUBLISHER_VERSION}/mcp-publisher_linux_amd64.tar.gz"
           echo "${MCP_PUBLISHER_SHA256}  mcp-publisher_linux_amd64.tar.gz" | sha256sum -c -
           tar xzf mcp-publisher_linux_amd64.tar.gz mcp-publisher
@@ -85,6 +111,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $GITHUB_REF_NAME already exists; skipping."
+            exit 0
+          fi
           VERSION="${GITHUB_REF_NAME#v}"
           awk -v v="$VERSION" '$0 ~ "^## \\[" v "\\]" {f=1; next} /^## \[/ {f=0} f' CHANGELOG.md > notes.md
-          gh release create "$GITHUB_REF_NAME" bundle/*.mcpb --title "$GITHUB_REF_NAME" --notes-file notes.md --verify-tag
+          gh release create "$GITHUB_REF_NAME" bundle/*.mcpb --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --notes-file notes.md --verify-tag

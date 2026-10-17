@@ -2,9 +2,16 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/).
 
+## [1.0.1] - 2026-10-17
+
+### Changed
+
+- The release workflow can be re-run safely: it skips npm, MCP Registry and GitHub release steps that already completed, and waits for npm to serve a new version before registering it in the MCP Registry.
+- First release listed in the MCP Registry and on GitHub Releases (1.0.0 was published to npm only). No changes to the server itself.
+
 ## [1.0.0] - 2026-10-17
 
-First generally available release, published to npm as `@oryanomer/whoop-mcp` and to the MCP Registry as `io.github.oryanomer1/whoop-mcp`.
+First generally available release, published to npm as `@oryanomer/whoop-mcp`.
 
 ### Added
 
@@ -19,4 +26,5 @@ First generally available release, published to npm as `@oryanomer/whoop-mcp` an
 - Hardened OAuth callback: forged or stale callbacks are refused without aborting the login, and malformed requests are handled.
 - Unit, MCP integration, end-to-end (subprocess) and packaging tests, with coverage thresholds; CI on Linux, macOS and Windows with Node 20, 22 and 24.
 
-[1.0.0]: https://github.com/oryanomer1/whoop-mcp/releases/tag/v1.0.0
+[1.0.1]: https://github.com/oryanomer1/whoop-mcp/releases/tag/v1.0.1
+[1.0.0]: https://www.npmjs.com/package/@oryanomer/whoop-mcp/v/1.0.0
