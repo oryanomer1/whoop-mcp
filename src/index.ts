@@ -5,6 +5,7 @@ import { TokenManager, TokenStore } from "./auth.js";
 import { WhoopClient } from "./client.js";
 import { DEFAULT_REDIRECT_URI, tokenPath } from "./config.js";
 import { login } from "./login.js";
+import { promptLine, promptSecret } from "./prompt.js";
 import { createServer } from "./server.js";
 
 const { version } = createRequire(import.meta.url)("../package.json") as { version: string };
@@ -18,8 +19,8 @@ Usage:
   whoop-mcp logout    Delete the locally stored tokens
 
 Environment:
-  WHOOP_CLIENT_ID       Client ID of your app at developer-dashboard.whoop.com (needed for auth)
-  WHOOP_CLIENT_SECRET   Client secret of that app (needed for auth)
+  WHOOP_CLIENT_ID       Client ID of your app at developer-dashboard.whoop.com (auth asks if unset)
+  WHOOP_CLIENT_SECRET   Client secret of that app (auth asks, without echoing, if unset)
   WHOOP_REDIRECT_URI    Redirect URI registered on the app (default: ${DEFAULT_REDIRECT_URI})
   WHOOP_TOKEN_PATH      Token file (default: ~/.config/whoop-mcp/tokens.json)
 `;
@@ -41,20 +42,29 @@ async function serve(store: TokenStore): Promise<void> {
 }
 
 async function auth(store: TokenStore): Promise<void> {
+  const redirectUri = env.WHOOP_REDIRECT_URI || DEFAULT_REDIRECT_URI;
   // Re-running auth can reuse the client credentials saved last time.
   const saved = await store.load().catch(() => null);
-  const clientId = env.WHOOP_CLIENT_ID || saved?.client_id;
-  const clientSecret = env.WHOOP_CLIENT_SECRET || saved?.client_secret;
+  let clientId = env.WHOOP_CLIENT_ID || saved?.client_id;
+  let clientSecret = env.WHOOP_CLIENT_SECRET || saved?.client_secret;
+  if ((!clientId || !clientSecret) && process.stdin.isTTY) {
+    console.log(
+      `You need a WHOOP developer app: https://developer-dashboard.whoop.com/apps/create\n` +
+        `Enable all read:* scopes and add the redirect URI ${redirectUri}\n`,
+    );
+    clientId ||= await promptLine("Client ID: ");
+    clientSecret ||= await promptSecret("Client Secret (hidden): ");
+  }
   if (!clientId || !clientSecret) {
     throw new Error(
       "Set WHOOP_CLIENT_ID and WHOOP_CLIENT_SECRET first. Create an app at https://developer-dashboard.whoop.com " +
-        `with redirect URI ${env.WHOOP_REDIRECT_URI || DEFAULT_REDIRECT_URI}. See the README for details.`,
+        `with redirect URI ${redirectUri}. See the README for details.`,
     );
   }
   await login({
     clientId,
     clientSecret,
-    redirectUri: env.WHOOP_REDIRECT_URI || DEFAULT_REDIRECT_URI,
+    redirectUri,
     store,
     log: (m) => console.log(m),
   });

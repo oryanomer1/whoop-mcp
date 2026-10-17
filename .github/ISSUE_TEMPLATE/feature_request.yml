@@ -1,0 +1,16 @@
+name: Feature request
+description: Suggest a tool or improvement
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What would you like to ask your WHOOP data?
+      description: Describe the question or workflow this would enable.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: A new tool, a new field, or a change to an existing tool? (whoop-mcp stays read-only.)

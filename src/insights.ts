@@ -62,6 +62,8 @@ function stats(values: (number | undefined)[]) {
   };
 }
 
+const duration = (s: Sleep) => Date.parse(s.end) - Date.parse(s.start);
+
 /** WHOOP's recovery color bands. */
 function recoveryZone(pct: number | undefined): "green" | "yellow" | "red" | undefined {
   if (pct == null) return undefined;
@@ -78,10 +80,16 @@ export async function trends(client: WhoopClient, days: number, now = Date.now()
   ]);
 
   const recoveryByCycle = new Map<number, Recovery>(recoveries.records.map((r) => [r.cycle_id, r]));
-  const sleepByCycle = new Map<number, Sleep>(
-    sleeps.records.filter((s) => !s.nap).map((s) => [s.cycle_id, s]),
-  );
-  const ordered = [...cycles.records].sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
+  const sleepById = new Map<string, Sleep>(sleeps.records.map((s) => [s.id, s]));
+  // WHOOP's `start` filter also returns the cycle already in progress at `start`, so keep the last `days`.
+  const ordered = [...cycles.records].sort((a, b) => Date.parse(a.start) - Date.parse(b.start)).slice(-days);
+  /** The sleep WHOOP based the day's recovery on, else the cycle's longest main sleep. */
+  const mainSleep = (c: Cycle): Sleep | undefined => {
+    const scored = sleepById.get(recoveryByCycle.get(c.id)?.sleep_id ?? "");
+    if (scored) return scored;
+    const candidates = sleeps.records.filter((s) => s.cycle_id === c.id && !s.nap);
+    return candidates.sort((a, b) => duration(b) - duration(a))[0];
+  };
   const workoutsByCycle = new Map<number, Workout[]>();
   for (const w of workouts.records) {
     const t = Date.parse(w.start);
@@ -93,7 +101,7 @@ export async function trends(client: WhoopClient, days: number, now = Date.now()
     const cycle = summarizeCycle(c);
     const recovery = recoveryByCycle.get(c.id);
     const r = recovery && summarizeRecovery(recovery);
-    const sleep = sleepByCycle.get(c.id);
+    const sleep = mainSleep(c);
     const s = sleep && summarizeSleep(sleep);
     const dayWorkouts = workoutsByCycle.get(c.id) ?? [];
     return {
@@ -133,7 +141,7 @@ export async function trends(client: WhoopClient, days: number, now = Date.now()
       respiratory_rate: stats(rows.map((r) => r.respiratory_rate)),
     },
     recovery_zones: zones,
-    total_workouts: workouts.records.length,
+    total_workouts: rows.reduce((n, r) => n + r.workouts.length, 0),
     days: rows,
   };
 }

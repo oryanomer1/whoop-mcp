@@ -1,6 +1,8 @@
-import { chmod, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { randomBytes } from "node:crypto";
+import { mkdir, open, readFile, rename, rm, stat, utimes } from "node:fs/promises";
 import { dirname } from "node:path";
-import { WHOOP_TOKEN_URL } from "./config.js";
+import { REQUEST_TIMEOUT_MS, WHOOP_TOKEN_URL } from "./config.js";
+import { sanitize, sleep } from "./util.js";
 
 export interface StoredCredentials {
   client_id: string;
@@ -30,14 +32,38 @@ export class NotAuthenticatedError extends Error {
 export class TokenRequestError extends Error {
   constructor(
     readonly status: number,
-    readonly body: string,
+    /** The OAuth `error` code, e.g. `invalid_grant`. */
+    readonly code?: string,
+    detail?: string,
   ) {
-    super(`WHOOP token request failed (${status}): ${body.slice(0, 300)}`);
+    super(`WHOOP token request failed (${status})${detail ? `: ${detail}` : "."}`);
     this.name = "TokenRequestError";
   }
 }
 
-/** Persists credentials as a 0600 JSON file. */
+/** A live lock holder refreshes the lock file's mtime this often... */
+const LOCK_HEARTBEAT_MS = 5_000;
+/** ...so a lock this old belongs to a crashed process and can be reclaimed. */
+const LOCK_STALE_MS = 20_000;
+/** Longer than LOCK_STALE_MS, so waiters always outlast a crashed holder's lock. */
+const LOCK_WAIT_MS = 45_000;
+/** Lock-file errors that mean "can't lock here" (e.g. a read-only directory), not "someone else has it". */
+const UNLOCKABLE = new Set(["EACCES", "EPERM", "EROFS"]);
+
+function isCredentials(value: unknown): value is StoredCredentials {
+  const c = value as StoredCredentials;
+  return (
+    typeof c === "object" &&
+    c !== null &&
+    typeof c.access_token === "string" &&
+    typeof c.refresh_token === "string" &&
+    typeof c.client_id === "string" &&
+    typeof c.client_secret === "string" &&
+    typeof c.expires_at === "number"
+  );
+}
+
+/** Persists credentials as an owner-only (0600) JSON file. */
 export class TokenStore {
   constructor(readonly path: string) {}
 
@@ -49,16 +75,37 @@ export class TokenStore {
       if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
       throw err;
     }
-    return JSON.parse(text) as StoredCredentials;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      // Not JSON.parse's message: it quotes fragments of the file, which holds secrets.
+      parsed = undefined;
+    }
+    if (!isCredentials(parsed)) {
+      throw new NotAuthenticatedError(`The token file ${this.path} is corrupt. Run \`whoop-mcp auth\` to reconnect.`);
+    }
+    return parsed;
   }
 
   async save(creds: StoredCredentials): Promise<void> {
     await mkdir(dirname(this.path), { recursive: true, mode: 0o700 });
-    // Write-then-rename so a crash can't leave a truncated file and lose the rotating refresh token.
-    const tmp = `${this.path}.${process.pid}.tmp`;
-    await writeFile(tmp, JSON.stringify(creds, null, 2) + "\n", { mode: 0o600 });
-    await rename(tmp, this.path);
-    await chmod(this.path, 0o600);
+    // Exclusive create under a random name never writes into a pre-planted file or symlink.
+    // Write-then-rename means a crash can't leave a truncated file and lose the rotating refresh token.
+    const tmp = `${this.path}.${randomBytes(6).toString("hex")}.tmp`;
+    try {
+      const file = await open(tmp, "wx", 0o600);
+      try {
+        await file.writeFile(JSON.stringify(creds, null, 2) + "\n");
+        await file.sync();
+      } finally {
+        await file.close();
+      }
+      await rename(tmp, this.path);
+    } catch (err) {
+      await rm(tmp, { force: true });
+      throw err;
+    }
   }
 
   async clear(): Promise<boolean> {
@@ -70,6 +117,83 @@ export class TokenStore {
       throw err;
     }
   }
+
+  /**
+   * Runs `fn` holding a lock file next to the token file, so processes sharing
+   * the file (e.g. Claude Desktop and Claude Code) never refresh at the same time.
+   * If no lock can be created at all (e.g. a read-only directory), runs `fn` unlocked
+   * and reports why through `onUnlockable`.
+   */
+  async withLock<T>(fn: () => Promise<T>, onUnlockable?: (err: Error) => void): Promise<T> {
+    const lock = `${this.path}.lock`;
+    const nonce = randomBytes(8).toString("hex");
+    await mkdir(dirname(this.path), { recursive: true, mode: 0o700 });
+    const deadline = Date.now() + LOCK_WAIT_MS;
+    for (;;) {
+      try {
+        const file = await open(lock, "wx", 0o600);
+        try {
+          await file.writeFile(nonce);
+        } finally {
+          await file.close();
+        }
+        break;
+      } catch (err) {
+        const code = (err as NodeJS.ErrnoException).code ?? "";
+        if (UNLOCKABLE.has(code)) {
+          onUnlockable?.(err as Error);
+          return fn();
+        }
+        if (code !== "EEXIST") throw err;
+        const info = await stat(lock).catch(() => null);
+        if (info && Date.now() - info.mtimeMs > LOCK_STALE_MS) {
+          // The holder stopped heartbeating, so it crashed. Remove that lock, unless a
+          // competing waiter has already replaced it with a fresh one.
+          const staleNonce = await readFile(lock, "utf8").catch(() => null);
+          const again = await stat(lock).catch(() => null);
+          if (again?.mtimeMs === info.mtimeMs) await removeLock(lock, staleNonce);
+          continue;
+        }
+        if (Date.now() > deadline) {
+          throw new Error("Another whoop-mcp process is busy refreshing the WHOOP tokens. Try again in a moment.");
+        }
+        await sleep(50 + Math.random() * 100);
+      }
+    }
+    const heartbeat = setInterval(() => {
+      const now = new Date();
+      utimes(lock, now, now).catch(() => {});
+    }, LOCK_HEARTBEAT_MS);
+    heartbeat.unref();
+    try {
+      return await fn();
+    } finally {
+      clearInterval(heartbeat);
+      await removeLock(lock, nonce);
+    }
+  }
+}
+
+/** Deletes the lock only while it still holds `nonce`, so nobody removes a lock they don't own. */
+async function removeLock(lock: string, nonce: string | null): Promise<void> {
+  try {
+    if (nonce === null || (await readFile(lock, "utf8")) !== nonce) return;
+    // Retries cover Windows, where antivirus can briefly hold the file (EBUSY/EPERM).
+    await rm(lock, { force: true, maxRetries: 3, retryDelay: 50 });
+  } catch {
+    // Already gone, or still busy: a lock that stops heartbeating is reclaimed as stale.
+  }
+}
+
+function parseTokenError(body: string): { code?: string; detail?: string } {
+  try {
+    const { error, error_description } = JSON.parse(body) as { error?: unknown; error_description?: unknown };
+    if (typeof error !== "string") return {};
+    const code = sanitize(error, 60);
+    return { code, detail: typeof error_description === "string" ? `${code} (${sanitize(error_description)})` : code };
+  } catch {
+    return {};
+  }
 }
 
 export async function requestToken(
@@ -80,19 +204,34 @@ export async function requestToken(
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
     body: new URLSearchParams(params).toString(),
+    // Never re-send the client secret or refresh token to a redirect target.
+    redirect: "error",
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
   const text = await res.text();
-  if (!res.ok) throw new TokenRequestError(res.status, text);
-  return JSON.parse(text) as TokenResponse;
+  if (!res.ok) {
+    const { code, detail } = parseTokenError(text);
+    throw new TokenRequestError(res.status, code, detail);
+  }
+  let token: TokenResponse | undefined;
+  try {
+    token = JSON.parse(text) as TokenResponse;
+  } catch {
+    token = undefined;
+  }
+  if (typeof token?.access_token !== "string" || typeof token.expires_in !== "number") {
+    throw new Error("WHOOP returned an unexpected token response.");
+  }
+  return token;
 }
 
 export function toStoredCredentials(
   token: TokenResponse,
   client: { clientId: string; clientSecret: string },
   now: number,
-  previousRefreshToken?: string,
+  previous?: { refresh_token: string; scope?: string },
 ): StoredCredentials {
-  const refreshToken = token.refresh_token ?? previousRefreshToken;
+  const refreshToken = token.refresh_token ?? previous?.refresh_token;
   if (!refreshToken) {
     throw new Error("WHOOP did not return a refresh token. Make sure the `offline` scope is enabled for your app.");
   }
@@ -102,7 +241,7 @@ export function toStoredCredentials(
     access_token: token.access_token,
     refresh_token: refreshToken,
     expires_at: now + token.expires_in * 1000,
-    scope: token.scope,
+    scope: token.scope ?? previous?.scope,
   };
 }
 
@@ -113,6 +252,8 @@ export interface TokenManagerOptions {
   clientSecret?: string;
   fetch?: typeof fetch;
   now?: () => number;
+  /** Diagnostics sink; defaults to stderr (stdout carries the MCP protocol). */
+  log?: (message: string) => void;
 }
 
 /** Refresh this long before the access token actually expires. */
@@ -120,20 +261,28 @@ const EXPIRY_SKEW_MS = 60_000;
 
 export class TokenManager {
   private creds: StoredCredentials | null = null;
+  /** True when refreshed tokens couldn't be written: memory then holds the only valid refresh token. */
+  private unsaved = false;
+  /** While unsaved: the (already spent) refresh token the file still contains. */
+  private unsavedFrom: string | null = null;
+  private warnedUnlockable = false;
   private refreshing: Promise<StoredCredentials> | null = null;
   private readonly now: () => number;
+  private readonly log: (message: string) => void;
 
   constructor(
     private readonly store: TokenStore,
     private readonly opts: TokenManagerOptions = {},
   ) {
     this.now = opts.now ?? Date.now;
+    this.log = opts.log ?? ((m) => console.error(m));
   }
 
   async getAccessToken(): Promise<string> {
     const creds = await this.current();
-    if (this.isFresh(creds)) return creds.access_token;
-    return (await this.refresh()).access_token;
+    if (!this.isFresh(creds)) return (await this.refresh()).access_token;
+    if (this.unsaved) await this.retrySave();
+    return this.creds!.access_token;
   }
 
   /**
@@ -166,33 +315,66 @@ export class TokenManager {
     return this.refreshing;
   }
 
-  private async doRefresh(): Promise<StoredCredentials> {
-    // Re-read the file: `whoop-mcp auth` or another server process may have rotated the tokens.
-    const onDisk = await this.store.load();
-    if (!onDisk) throw new NotAuthenticatedError();
-    if (onDisk.access_token !== this.creds?.access_token && this.isFresh(onDisk)) {
-      this.creds = onDisk;
-      return onDisk;
-    }
+  private doRefresh(): Promise<StoredCredentials> {
+    return this.store.withLock(async () => {
+      // Re-read: `whoop-mcp auth` or another process may already have rotated the tokens.
+      const latest = await this.store.load().catch((err: unknown) => {
+        if (this.unsaved) return null;
+        throw err;
+      });
+      if (this.unsaved && this.creds && (!latest || latest.refresh_token === this.unsavedFrom)) {
+        // The file still holds tokens we already rotated; memory has the current ones.
+        return this.refreshFrom(this.creds, true);
+      }
+      if (!latest) throw new NotAuthenticatedError();
+      if (latest.access_token !== this.creds?.access_token && this.isFresh(latest)) return this.adopt(latest);
+      return this.refreshFrom(latest, true);
+    }, this.onUnlockable);
+  }
 
+  private readonly onUnlockable = (err: Error) => {
+    if (this.warnedUnlockable) return;
+    this.warnedUnlockable = true;
+    this.log(`whoop-mcp: can't create a lock next to ${this.store.path} (${err.message}); refreshing without it.`);
+  };
+
+  private adopt(creds: StoredCredentials): StoredCredentials {
+    this.creds = creds;
+    this.unsaved = false;
+    this.unsavedFrom = null;
+    return creds;
+  }
+
+  private async refreshFrom(base: StoredCredentials, mayRetry: boolean, scope = base.scope || "offline"): Promise<StoredCredentials> {
     const client = {
-      clientId: this.opts.clientId ?? onDisk.client_id,
-      clientSecret: this.opts.clientSecret ?? onDisk.client_secret,
+      clientId: this.opts.clientId ?? base.client_id,
+      clientSecret: this.opts.clientSecret ?? base.client_secret,
     };
     let token: TokenResponse;
     try {
       token = await requestToken(
         {
           grant_type: "refresh_token",
-          refresh_token: onDisk.refresh_token,
+          refresh_token: base.refresh_token,
           client_id: client.clientId,
           client_secret: client.clientSecret,
-          scope: "offline",
+          // Request exactly what was granted, so a refresh can never narrow access.
+          scope,
         },
         this.opts.fetch,
       );
     } catch (err) {
+      if (err instanceof TokenRequestError && err.code === "invalid_scope" && scope !== "offline") {
+        // Rejected before the token was used, so it's safe to retry the way WHOOP's docs show.
+        return this.refreshFrom(base, mayRetry, "offline");
+      }
       if (err instanceof TokenRequestError && (err.status === 400 || err.status === 401)) {
+        // Lost a race against a process that doesn't hold our lock (e.g. an older version)?
+        const latest = await this.store.load().catch(() => null);
+        if (mayRetry && latest && latest.refresh_token !== base.refresh_token) {
+          this.adopt(latest);
+          return this.isFresh(latest) ? latest : this.refreshFrom(latest, false);
+        }
         throw new NotAuthenticatedError(
           `WHOOP rejected the refresh token (${err.status}). Run \`whoop-mcp auth\` to reconnect your account.`,
         );
@@ -200,9 +382,40 @@ export class TokenManager {
       throw err;
     }
 
-    const next = toStoredCredentials(token, client, this.now(), onDisk.refresh_token);
-    await this.store.save(next);
+    // The old refresh token is spent now, so hold the new one in memory before anything can fail.
+    const next = toStoredCredentials(token, client, this.now(), base);
     this.creds = next;
+    try {
+      await this.store.save(next);
+      this.unsaved = false;
+      this.unsavedFrom = null;
+    } catch (err) {
+      if (!this.unsaved) {
+        this.log(
+          `whoop-mcp: could not save refreshed tokens to ${this.store.path} (${(err as Error).message}). ` +
+            "Keeping them in memory and retrying.",
+        );
+        this.unsaved = true;
+        this.unsavedFrom = base.refresh_token;
+      }
+    }
     return next;
+  }
+
+  /** Retries writing in-memory tokens, unless the file has since been replaced (e.g. by `whoop-mcp auth`). */
+  private async retrySave(): Promise<void> {
+    try {
+      await this.store.withLock(async () => {
+        const onDisk = await this.store.load().catch(() => null);
+        if (onDisk && onDisk.refresh_token !== this.unsavedFrom) {
+          this.adopt(onDisk);
+          return;
+        }
+        await this.store.save(this.creds!);
+        this.adopt(this.creds!);
+      }, this.onUnlockable);
+    } catch {
+      // Still unsaved; the next call tries again.
+    }
   }
 }

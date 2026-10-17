@@ -1,0 +1,22 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.oryanomer1/whoop-mcp",
+  "title": "WHOOP (read-only)",
+  "description": "Read-only access to your WHOOP recovery, HRV, sleep, strain, workouts and trends.",
+  "repository": {
+    "url": "https://github.com/oryanomer1/whoop-mcp",
+    "source": "github"
+  },
+  "websiteUrl": "https://github.com/oryanomer1/whoop-mcp#readme",
+  "version": "1.0.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "@oryanomer1/whoop-mcp",
+      "version": "1.0.0",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}

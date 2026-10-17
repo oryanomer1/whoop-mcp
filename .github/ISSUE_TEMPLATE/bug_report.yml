@@ -1,0 +1,31 @@
+name: Bug report
+description: Something isn't working
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: "Please don't paste tokens, your client secret or personal health data. For security issues, use [private reporting](https://github.com/oryanomer1/whoop-mcp/security/advisories/new) instead."
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead? Include the exact error message.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: whoop-mcp version
+      description: Output of `npx -y @oryanomer1/whoop-mcp --version`
+    validations:
+      required: true
+  - type: input
+    id: client
+    attributes:
+      label: MCP client
+      placeholder: Claude Desktop 1.x, Claude Code 2.x, Cursor, VS Code...
+  - type: input
+    id: env
+    attributes:
+      label: OS and Node.js version
+      placeholder: macOS 15, Node 22.11

@@ -106,6 +106,91 @@ describe("WhoopClient", () => {
   });
 });
 
+describe("WhoopClient robustness", () => {
+  it("stops paginating on an empty page that still has a next_token", async () => {
+    const fetch = fakeFetch(() => json({ records: [], next_token: "again" }));
+    const client = new WhoopClient(staticTokens, { fetch });
+
+    const res = await client.listCycles({ limit: 200 });
+
+    expect(res.records).toEqual([]);
+    expect(fetch.calls).toHaveLength(1);
+  });
+
+  it("stops paginating when WHOOP repeats a next_token", async () => {
+    const fetch = fakeFetch(() => json({ records: [{ id: 1 }], next_token: "same" }));
+    const client = new WhoopClient(staticTokens, { fetch });
+
+    const res = await client.listCycles({ limit: 200 });
+
+    expect(fetch.calls).toHaveLength(2);
+    expect(res.next_token).toBeNull();
+  });
+
+  it("never requests more pages than the limit needs", async () => {
+    let n = 0;
+    const fetch = fakeFetch(() => json({ records: [{ id: n }], next_token: `t${n++}` }));
+    const client = new WhoopClient(staticTokens, { fetch });
+
+    await client.listCycles({ limit: 50 }); // 2 pages needed, so at most 3 requests
+
+    expect(fetch.calls.length).toBeLessThanOrEqual(3);
+  });
+
+  it("refuses non-read endpoints even if asked directly", async () => {
+    const fetch = fakeFetch(() => json({}));
+    const client = new WhoopClient(staticTokens, { fetch });
+
+    await expect(client.get("/v2/user/access")).rejects.toThrow(/Refusing/);
+    await expect(client.get("/v1/activity-mapping/1")).rejects.toThrow(/Refusing/);
+    await expect(client.get("//evil.example.com/v2/cycle")).rejects.toThrow(/Refusing/);
+    expect(fetch.calls).toHaveLength(0);
+  });
+
+  it("explains non-JSON responses without echoing them", async () => {
+    const fetch = fakeFetch(() => new Response("<html>gateway</html>", { status: 200 }));
+    const client = new WhoopClient(staticTokens, { fetch });
+    await expect(client.get("/v2/cycle")).rejects.toThrow(/non-JSON/);
+  });
+
+  it("retries network failures, then reports them", async () => {
+    const fetch = fakeFetch(() => {
+      throw new TypeError("fetch failed");
+    });
+    const client = new WhoopClient(staticTokens, { fetch, sleep: noSleep, maxRetries: 2 });
+
+    await expect(client.get("/v2/cycle")).rejects.toThrow(/Could not reach WHOOP/);
+    expect(fetch.calls).toHaveLength(3);
+  });
+
+  it("reports timeouts clearly", async () => {
+    const fetch = fakeFetch(() => {
+      throw new DOMException("The operation timed out.", "TimeoutError");
+    });
+    const client = new WhoopClient(staticTokens, { fetch, sleep: noSleep, maxRetries: 0 });
+    await expect(client.get("/v2/cycle")).rejects.toThrow(/did not respond within 30s/);
+  });
+
+  it("stops immediately when the tool call is cancelled", async () => {
+    const controller = new AbortController();
+    const fetch = fakeFetch(() => {
+      controller.abort();
+      throw new DOMException("aborted", "AbortError");
+    });
+    const client = new WhoopClient(staticTokens, { fetch, sleep: noSleep }).withSignal(controller.signal);
+
+    await expect(client.get("/v2/cycle")).rejects.toThrow();
+    expect(fetch.calls).toHaveLength(1);
+  });
+
+  it("strips control characters from upstream error bodies", async () => {
+    const fetch = fakeFetch(() => new Response("bad\x1b[2Jthing", { status: 418 }));
+    const client = new WhoopClient(staticTokens, { fetch });
+    const err = await client.get("/v2/cycle").catch((e: Error) => e);
+    expect((err as Error).message).not.toMatch(/\x1b/);
+  });
+});
+
 describe("read-only guarantee", () => {
   it("never issues a non-GET request to the WHOOP data API", () => {
     const srcDir = join(import.meta.dirname, "..", "src");

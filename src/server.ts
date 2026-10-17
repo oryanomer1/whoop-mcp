@@ -20,7 +20,20 @@ const READ_ONLY: ToolAnnotations = {
   openWorldHint: true,
 };
 
-const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+const DATE_ONLY = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/** Parses YYYY-MM-DD strictly: rejects dates like 2026-02-30 that Date would silently roll over. */
+function parseDateOnly(value: string): [number, number, number] | null {
+  const m = DATE_ONLY.exec(value);
+  if (!m) return null;
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const check = new Date(0);
+  check.setUTCFullYear(y, mo - 1, d);
+  if (check.getUTCFullYear() !== y || check.getUTCMonth() !== mo - 1 || check.getUTCDate() !== d) return null;
+  return [y, mo, d];
+}
+
+const dateOnly = z.string().refine((v) => parseDateOnly(v) !== null, "Use a real date in YYYY-MM-DD format");
 
 const rangeShape = {
   start: z
@@ -57,9 +70,14 @@ type RangeArgs = {
 /** Converts a date or date-time argument into an ISO 8601 instant. */
 export function parseBoundary(value: string, kind: "start" | "end"): string {
   if (DATE_ONLY.test(value)) {
-    const [y, m, d] = value.split("-").map(Number);
+    const parts = parseDateOnly(value);
+    if (!parts) throw new Error(`Invalid ${kind} "${value}": no such date.`);
+    const [y, m, d] = parts;
     // Dates are local calendar days; an end date includes the whole day.
-    return new Date(y, m - 1, kind === "end" ? d + 1 : d).toISOString();
+    // setFullYear (unlike the Date constructor) keeps years below 100 as-is.
+    const local = new Date(2000, 0, 1);
+    local.setFullYear(y, m - 1, kind === "end" ? d + 1 : d);
+    return local.toISOString();
   }
   const ms = Date.parse(value);
   if (Number.isNaN(ms)) throw new Error(`Invalid ${kind} "${value}". Use YYYY-MM-DD or an ISO 8601 date-time.`);
@@ -95,9 +113,10 @@ export function createServer(client: WhoopClient, version = "0.0.0"): McpServer 
       description: "The user's WHOOP profile (name, email) and body measurements (height, weight, max heart rate).",
       annotations: READ_ONLY,
     },
-    () =>
+    ({ signal }) =>
       respond(async () => {
-        const [profile, body] = await Promise.all([client.getProfile(), client.getBodyMeasurement()]);
+        const whoop = client.withSignal(signal);
+        const [profile, body] = await Promise.all([whoop.getProfile(), whoop.getBodyMeasurement()]);
         return { ...profile, ...body };
       }),
   );
@@ -109,15 +128,13 @@ export function createServer(client: WhoopClient, version = "0.0.0"): McpServer 
       description:
         "Everything for one WHOOP day: recovery (score, HRV, resting HR, SpO2, skin temp), last night's sleep, naps, day strain and calories, and workouts. Omit date for the current/latest day.",
       inputSchema: {
-        date: z
-          .string()
-          .regex(DATE_ONLY, "Use YYYY-MM-DD")
+        date: dateOnly
           .optional()
           .describe("Day to show (YYYY-MM-DD), i.e. the day you woke up on. Defaults to the latest day."),
       },
       annotations: READ_ONLY,
     },
-    ({ date }) => respond(() => dailyOverview(client, date)),
+    ({ date }, { signal }) => respond(() => dailyOverview(client.withSignal(signal), date)),
   );
 
   server.registerTool(
@@ -131,7 +148,7 @@ export function createServer(client: WhoopClient, version = "0.0.0"): McpServer 
       },
       annotations: READ_ONLY,
     },
-    ({ days }) => respond(() => trends(client, days)),
+    ({ days }, { signal }) => respond(() => trends(client.withSignal(signal), days)),
   );
 
   server.registerTool(
@@ -143,9 +160,9 @@ export function createServer(client: WhoopClient, version = "0.0.0"): McpServer 
       inputSchema: rangeShape,
       annotations: READ_ONLY,
     },
-    ({ raw, ...args }) =>
+    ({ raw, ...args }, { signal }) =>
       respond(async () => {
-        const res = await client.listCycles(toCollectionQuery(args));
+        const res = await client.withSignal(signal).listCycles(toCollectionQuery(args));
         return { records: raw ? res.records : res.records.map(summarizeCycle), next_token: res.next_token };
       }),
   );
@@ -161,12 +178,13 @@ export function createServer(client: WhoopClient, version = "0.0.0"): McpServer 
       },
       annotations: READ_ONLY,
     },
-    ({ cycle_id, raw }) =>
+    ({ cycle_id, raw }, { signal }) =>
       respond(async () => {
-        const cycle = await client.getCycle(cycle_id);
+        const whoop = client.withSignal(signal);
+        const cycle = await whoop.getCycle(cycle_id);
         const [recovery, sleep] = await Promise.all([
-          orNull(client.getCycleRecovery(cycle_id)),
-          orNull(client.getCycleSleep(cycle_id)),
+          orNull(whoop.getCycleRecovery(cycle_id)),
+          orNull(whoop.getCycleSleep(cycle_id)),
         ]);
         if (raw) return { cycle, recovery, sleep };
         return {
@@ -186,9 +204,9 @@ export function createServer(client: WhoopClient, version = "0.0.0"): McpServer 
       inputSchema: rangeShape,
       annotations: READ_ONLY,
     },
-    ({ raw, ...args }) =>
+    ({ raw, ...args }, { signal }) =>
       respond(async () => {
-        const res = await client.listRecoveries(toCollectionQuery(args));
+        const res = await client.withSignal(signal).listRecoveries(toCollectionQuery(args));
         return { records: raw ? res.records : res.records.map(summarizeRecovery), next_token: res.next_token };
       }),
   );
@@ -205,9 +223,9 @@ export function createServer(client: WhoopClient, version = "0.0.0"): McpServer 
       },
       annotations: READ_ONLY,
     },
-    ({ raw, include_naps, ...args }) =>
+    ({ raw, include_naps, ...args }, { signal }) =>
       respond(async () => {
-        const res = await client.listSleeps(toCollectionQuery(args));
+        const res = await client.withSignal(signal).listSleeps(toCollectionQuery(args));
         const records = include_naps ? res.records : res.records.filter((s) => !s.nap);
         return { records: raw ? records : records.map(summarizeSleep), next_token: res.next_token };
       }),
@@ -219,14 +237,14 @@ export function createServer(client: WhoopClient, version = "0.0.0"): McpServer 
       title: "Get sleep",
       description: "One sleep or nap by id.",
       inputSchema: {
-        sleep_id: z.string().uuid().describe("Sleep id (UUID)."),
+        sleep_id: z.guid().describe("Sleep id (UUID)."),
         raw: rangeShape.raw,
       },
       annotations: READ_ONLY,
     },
-    ({ sleep_id, raw }) =>
+    ({ sleep_id, raw }, { signal }) =>
       respond(async () => {
-        const sleep = await client.getSleep(sleep_id);
+        const sleep = await client.withSignal(signal).getSleep(sleep_id);
         return raw ? sleep : summarizeSleep(sleep);
       }),
   );
@@ -248,9 +266,9 @@ export function createServer(client: WhoopClient, version = "0.0.0"): McpServer 
       },
       annotations: READ_ONLY,
     },
-    ({ raw, sport, ...args }) =>
+    ({ raw, sport, ...args }, { signal }) =>
       respond(async () => {
-        const res = await client.listWorkouts(toCollectionQuery(args));
+        const res = await client.withSignal(signal).listWorkouts(toCollectionQuery(args));
         const needle = sport?.toLowerCase();
         const records = needle ? res.records.filter((w) => w.sport_name.toLowerCase().includes(needle)) : res.records;
         return { records: raw ? records : records.map(summarizeWorkout), next_token: res.next_token };
@@ -263,14 +281,14 @@ export function createServer(client: WhoopClient, version = "0.0.0"): McpServer 
       title: "Get workout",
       description: "One workout by id.",
       inputSchema: {
-        workout_id: z.string().uuid().describe("Workout id (UUID)."),
+        workout_id: z.guid().describe("Workout id (UUID)."),
         raw: rangeShape.raw,
       },
       annotations: READ_ONLY,
     },
-    ({ workout_id, raw }) =>
+    ({ workout_id, raw }, { signal }) =>
       respond(async () => {
-        const workout = await client.getWorkout(workout_id);
+        const workout = await client.withSignal(signal).getWorkout(workout_id);
         return raw ? workout : summarizeWorkout(workout);
       }),
   );

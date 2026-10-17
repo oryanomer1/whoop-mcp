@@ -1,7 +1,7 @@
 {
-  "name": "whoop-mcp",
-  "version": "0.1.0",
-  "description": "Read-only MCP server for your WHOOP data: recovery, sleep, strain, workouts and trends.",
+  "name": "@oryanomer1/whoop-mcp",
+  "version": "1.0.0",
+  "description": "Read-only MCP server for your WHOOP data: recovery, HRV, sleep, strain, workouts and trends.",
   "keywords": [
     "mcp",
     "model-context-protocol",
@@ -10,7 +10,14 @@
     "health",
     "fitness",
     "hrv",
-    "sleep"
+    "sleep",
+    "mcp-server",
+    "whoop-api",
+    "wearables",
+    "recovery",
+    "strain",
+    "quantified-self",
+    "read-only"
   ],
   "homepage": "https://github.com/oryanomer1/whoop-mcp#readme",
   "bugs": "https://github.com/oryanomer1/whoop-mcp/issues",
@@ -31,12 +38,16 @@
     "node": ">=20.11"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && chmod +x dist/index.js",
+    "build": "tsc -p tsconfig.build.json",
     "prepare": "npm run build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "start": "node dist/index.js",
-    "inspect": "npx @modelcontextprotocol/inspector node dist/index.js"
+    "inspect": "npx @modelcontextprotocol/inspector node dist/index.js",
+    "test:coverage": "vitest run --coverage",
+    "version": "node scripts/sync-server-json.mjs && git add server.json",
+    "prebuild": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
+    "smoke:live": "npm run build && node scripts/live-smoke.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.1",
@@ -44,7 +55,12 @@
   },
   "devDependencies": {
     "@types/node": "^22.20.5",
+    "@vitest/coverage-v8": "^4.1.12",
     "typescript": "^5.9.3",
     "vitest": "^4.1.11"
+  },
+  "mcpName": "io.github.oryanomer1/whoop-mcp",
+  "publishConfig": {
+    "access": "public"
   }
 }

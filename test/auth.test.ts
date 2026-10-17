@@ -1,8 +1,9 @@
-import { mkdtempSync, statSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { beforeEach, describe, expect, it } from "vitest";
+import { chmodSync, mkdtempSync, readdirSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NotAuthenticatedError, TokenManager, TokenStore, type StoredCredentials } from "../src/auth.js";
+import { tokenPath } from "../src/config.js";
 import { fakeFetch, json } from "./helpers.js";
 
 const NOW = Date.parse("2026-10-13T12:00:00Z");
@@ -34,11 +35,81 @@ describe("TokenStore", () => {
     await store.save(creds());
 
     expect(await store.load()).toEqual(creds());
-    expect(statSync(store.path).mode & 0o777).toBe(0o600);
+    if (process.platform !== "win32") expect(statSync(store.path).mode & 0o777).toBe(0o600);
     expect(await store.clear()).toBe(true);
     expect(await store.clear()).toBe(false);
   });
+
+  it("leaves no temporary files behind", async () => {
+    await store.save(creds());
+    await store.save(creds({ access_token: "access-2" }));
+    expect(readdirSync(dirname(store.path))).toEqual(["tokens.json"]);
+  });
+
+  it("reports a corrupt file without echoing its contents", async () => {
+    await store.save(creds());
+    writeFileSync(store.path, '{"refresh_token": "SECRET-123');
+    const err = (await store.load().catch((e: unknown) => e)) as Error;
+    expect(err).toBeInstanceOf(NotAuthenticatedError);
+    expect(err.message).toContain("corrupt");
+    expect(err.message).not.toContain("SECRET");
+  });
 });
+
+describe("TokenStore.withLock", () => {
+  it("never removes a lock it no longer owns", async () => {
+    const lock = `${store.path}.lock`;
+    await store.withLock(async () => {
+      // Simulate another process that broke this lock and took its own.
+      writeFileSync(lock, "someone-else");
+    });
+    expect(statSync(lock).isFile()).toBe(true);
+  });
+
+  it("runs unlocked, and says so, where no lock file can be created", async () => {
+    if (process.platform === "win32" || process.getuid?.() === 0) return; // permissions differ
+    await store.save(creds());
+    chmodSync(dirname(store.path), 0o500);
+    try {
+      const onUnlockable = vi.fn();
+      expect(await store.withLock(async () => "ran", onUnlockable)).toBe("ran");
+      expect(onUnlockable).toHaveBeenCalledWith(expect.objectContaining({ code: "EACCES" }));
+    } finally {
+      chmodSync(dirname(store.path), 0o700);
+    }
+  });
+});
+
+describe("tokenPath", () => {
+  it("defaults to the XDG config directory", () => {
+    expect(tokenPath({ XDG_CONFIG_HOME: "/xdg" })).toBe(join("/xdg", "whoop-mcp", "tokens.json"));
+    expect(tokenPath({})).toBe(join(homedir(), ".config", "whoop-mcp", "tokens.json"));
+  });
+
+  it("accepts absolute or ~ paths and rejects relative ones", () => {
+    const abs = join(tmpdir(), "t.json");
+    expect(tokenPath({ WHOOP_TOKEN_PATH: abs })).toBe(abs);
+    expect(tokenPath({ WHOOP_TOKEN_PATH: "~/w/t.json" })).toBe(join(homedir(), "w", "t.json"));
+    expect(() => tokenPath({ WHOOP_TOKEN_PATH: "tokens.json" })).toThrow(/absolute/);
+  });
+});
+
+/** A fake WHOOP token endpoint that rotates refresh tokens and rejects reused ones, like the real one. */
+function rotatingTokenEndpoint(opts: { delayMs?: number } = {}) {
+  let valid = "refresh-1";
+  let n = 1;
+  const used: string[] = [];
+  const fetch = fakeFetch(async (_url, init) => {
+    const presented = new URLSearchParams(String(init?.body)).get("refresh_token")!;
+    used.push(presented);
+    if (opts.delayMs) await new Promise((r) => setTimeout(r, opts.delayMs));
+    if (presented !== valid) return json({ error: "invalid_grant" }, 400);
+    n++;
+    valid = `refresh-${n}`;
+    return refreshed(n);
+  });
+  return { fetch, used };
+}
 
 describe("TokenManager", () => {
   it("returns the stored token while it is fresh", async () => {
@@ -65,7 +136,7 @@ describe("TokenManager", () => {
       refresh_token: "refresh-1",
       client_id: "client",
       client_secret: "secret",
-      scope: "offline",
+      scope: "offline read:recovery", // the originally granted scopes, so refresh never narrows access
     });
     expect(await store.load()).toMatchObject({
       access_token: "access-2",
@@ -141,6 +212,119 @@ describe("TokenManager", () => {
     const err = await manager.getAccessToken().catch((e: unknown) => e);
     expect(err).toBeInstanceOf(NotAuthenticatedError);
     expect((err as Error).message).toContain("whoop-mcp auth");
+  });
+
+  it("keeps a rotated refresh token in memory if saving it fails", async () => {
+    class FlakyStore extends TokenStore {
+      failures = 0;
+      override async save(c: StoredCredentials) {
+        if (this.failures-- > 0) throw new Error("EROFS: read-only file system");
+        return super.save(c);
+      }
+    }
+    const flaky = new FlakyStore(store.path);
+    await flaky.save(creds({ expires_at: NOW - 1 }));
+    flaky.failures = 1;
+    const { fetch, used } = rotatingTokenEndpoint();
+    const log = vi.fn();
+    let now = NOW;
+    const manager = new TokenManager(flaky, { fetch, now: () => now, log });
+
+    expect(await manager.getAccessToken()).toBe("access-2");
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("could not save refreshed tokens"));
+
+    now += 2 * 3_600_000; // access-2 expires; the next refresh must use refresh-2 from memory
+    expect(await manager.getAccessToken()).toBe("access-3");
+    expect(used).toEqual(["refresh-1", "refresh-2"]);
+    expect(await flaky.load()).toMatchObject({ refresh_token: "refresh-3" });
+  });
+
+  it("doesn't overwrite credentials that `auth` saved while it was holding unsaved tokens", async () => {
+    class FlakyStore extends TokenStore {
+      failures = 0;
+      override async save(c: StoredCredentials) {
+        if (this.failures-- > 0) throw new Error("EBUSY: resource busy");
+        return super.save(c);
+      }
+    }
+    const flaky = new FlakyStore(store.path);
+    await flaky.save(creds({ expires_at: NOW - 1 }));
+    flaky.failures = 1;
+    const manager = new TokenManager(flaky, { fetch: rotatingTokenEndpoint().fetch, now: () => NOW, log: () => {} });
+    expect(await manager.getAccessToken()).toBe("access-2"); // refreshed, but not saved
+
+    // The user re-runs `whoop-mcp auth` with a different app.
+    await store.save(creds({ client_id: "new-app", access_token: "access-new", refresh_token: "refresh-new" }));
+
+    expect(await manager.getAccessToken()).toBe("access-new");
+    expect(await store.load()).toMatchObject({ client_id: "new-app", refresh_token: "refresh-new" });
+  });
+
+  it("refreshes even where the token directory is read-only, keeping tokens in memory", async () => {
+    if (process.platform === "win32" || process.getuid?.() === 0) return; // permissions differ
+    await store.save(creds({ expires_at: NOW - 1 }));
+    chmodSync(dirname(store.path), 0o500);
+    try {
+      const log = vi.fn();
+      const manager = new TokenManager(store, { fetch: rotatingTokenEndpoint().fetch, now: () => NOW, log });
+      expect(await manager.getAccessToken()).toBe("access-2");
+      expect(log).toHaveBeenCalledWith(expect.stringContaining("refreshing without it"));
+      expect(log).toHaveBeenCalledWith(expect.stringContaining("could not save refreshed tokens"));
+    } finally {
+      chmodSync(dirname(store.path), 0o700);
+    }
+  });
+
+  it("falls back to scope=offline if WHOOP rejects the granted scopes on refresh", async () => {
+    await store.save(creds({ expires_at: NOW - 1 }));
+    const fetch = fakeFetch((_url, init) =>
+      new URLSearchParams(String(init?.body)).get("scope") === "offline"
+        ? refreshed(2)
+        : json({ error: "invalid_scope" }, 400),
+    );
+    const manager = new TokenManager(store, { fetch, now: () => NOW });
+
+    expect(await manager.getAccessToken()).toBe("access-2");
+    expect(fetch.calls.map((c) => new URLSearchParams(String(c.init?.body)).get("scope"))).toEqual([
+      "offline read:recovery",
+      "offline",
+    ]);
+  });
+
+  it("serializes refreshes across processes sharing one token file", async () => {
+    await store.save(creds({ expires_at: NOW - 1 }));
+    const { fetch, used } = rotatingTokenEndpoint({ delayMs: 30 });
+    const processA = new TokenManager(new TokenStore(store.path), { fetch, now: () => NOW });
+    const processB = new TokenManager(new TokenStore(store.path), { fetch, now: () => NOW });
+
+    const tokens = await Promise.all([processA.getAccessToken(), processB.getAccessToken()]);
+
+    expect(tokens).toEqual(["access-2", "access-2"]);
+    expect(used).toEqual(["refresh-1"]);
+  });
+
+  it("adopts newer tokens when it loses a refresh race to a process without the lock", async () => {
+    await store.save(creds({ expires_at: NOW - 1 }));
+    const fetch = fakeFetch(async () => {
+      // Another process rotated refresh-1 a moment earlier and saved the result.
+      await store.save(creds({ access_token: "access-other", refresh_token: "refresh-other" }));
+      return json({ error: "invalid_grant" }, 400);
+    });
+    const manager = new TokenManager(store, { fetch, now: () => NOW });
+
+    expect(await manager.getAccessToken()).toBe("access-other");
+  });
+
+  it("breaks a stale lock left behind by a crashed process", async () => {
+    await store.save(creds({ expires_at: NOW - 1 }));
+    const lock = `${store.path}.lock`;
+    writeFileSync(lock, "");
+    const old = new Date(Date.now() - 60_000);
+    utimesSync(lock, old, old);
+    const manager = new TokenManager(store, { fetch: rotatingTokenEndpoint().fetch, now: () => NOW });
+
+    expect(await manager.getAccessToken()).toBe("access-2");
+    expect(() => statSync(lock)).toThrow();
   });
 
   it("explains how to connect when there are no tokens", async () => {

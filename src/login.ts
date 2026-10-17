@@ -1,9 +1,10 @@
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { createInterface } from "node:readline/promises";
 import { requestToken, toStoredCredentials, type StoredCredentials, type TokenStore } from "./auth.js";
 import { WHOOP_AUTH_URL, WHOOP_SCOPES } from "./config.js";
+import { promptLine } from "./prompt.js";
+import { sanitize } from "./util.js";
 
 export interface LoginOptions {
   clientId: string;
@@ -16,6 +17,8 @@ export interface LoginOptions {
   log?: (message: string) => void;
   /** Receives the authorization URL; tests use it to play the browser. */
   onAuthorizeUrl?: (url: string) => void;
+  /** Asks for the redirected URL when the redirect URI isn't a local callback. */
+  prompt?: (question: string) => Promise<string>;
 }
 
 const STATE_ALPHABET = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -55,7 +58,7 @@ export async function login(opts: LoginOptions): Promise<StoredCredentials> {
     log(`Open this URL, approve access, then copy the full URL you are redirected to:\n\n  ${authorizeUrl}\n`);
     opts.onAuthorizeUrl?.(authorizeUrl);
     if (opts.openBrowser !== false) openInBrowser(authorizeUrl);
-    code = codeFromRedirect(await promptLine("Paste the redirected URL: "), state);
+    code = codeFromRedirect(await (opts.prompt ?? promptLine)("Paste the redirected URL: "), state);
   }
 
   const token = await requestToken(
@@ -69,7 +72,8 @@ export async function login(opts: LoginOptions): Promise<StoredCredentials> {
     opts.fetch,
   );
   const creds = toStoredCredentials(token, { clientId: opts.clientId, clientSecret: opts.clientSecret }, Date.now());
-  await opts.store.save(creds);
+  // Under the token lock, so a running server's refresh can't overwrite the new grant.
+  await opts.store.withLock(() => opts.store.save(creds));
   return creds;
 }
 
@@ -77,15 +81,26 @@ function isLoopback(url: URL): boolean {
   return url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
 }
 
+export class StateMismatchError extends Error {
+  constructor() {
+    super("OAuth state mismatch. Start `whoop-mcp auth` again and use the newest browser tab.");
+    this.name = "StateMismatchError";
+  }
+}
+
 export function codeFromRedirect(redirectedUrl: string, expectedState: string): string {
-  const params = new URL(redirectedUrl.trim()).searchParams;
+  let params: URLSearchParams;
+  try {
+    params = new URL(redirectedUrl.trim()).searchParams;
+  } catch {
+    throw new Error("That doesn't look like a URL. Copy the full address from the browser's address bar.");
+  }
+  // Check state before anything else, so a forged request can't even report an error.
+  if (params.get("state") !== expectedState) throw new StateMismatchError();
   const error = params.get("error");
   if (error) {
     const description = params.get("error_description");
-    throw new Error(`WHOOP authorization failed: ${error}${description ? ` (${description})` : ""}`);
-  }
-  if (params.get("state") !== expectedState) {
-    throw new Error("OAuth state mismatch. Start `whoop-mcp auth` again and use the newest browser tab.");
+    throw new Error(`WHOOP authorization failed: ${sanitize(error, 80)}${description ? ` (${sanitize(description)})` : ""}`);
   }
   const code = params.get("code");
   if (!code) throw new Error("The redirect URL has no authorization code.");
@@ -108,21 +123,39 @@ function waitForCallback(
   };
 
   const code = new Promise<string>((resolve, reject) => {
+    const reply = (res: ServerResponse, status: number, title: string, message: string) => {
+      res.writeHead(status, { "Content-Type": "text/html; charset=utf-8", Connection: "close" });
+      res.end(page(title, message));
+    };
     const handler = (req: IncomingMessage, res: ServerResponse) => {
-      const url = new URL(req.url ?? "/", redirect);
-      if (url.pathname !== redirect.pathname) {
-        res.writeHead(404).end();
+      let url: URL;
+      try {
+        url = new URL(req.url ?? "/", redirect);
+      } catch {
+        reply(res, 400, "Bad request", "Malformed request.");
+        return;
+      }
+      if (req.method !== "GET" || url.pathname !== redirect.pathname) {
+        res.writeHead(404, { Connection: "close" }).end();
         return;
       }
       try {
         const result = codeFromRedirect(url.toString(), state);
-        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", Connection: "close" });
-        res.end(page("WHOOP connected", "You can close this tab and return to your terminal."));
+        reply(res, 200, "WHOOP connected", "You can close this tab and return to your terminal.");
         close();
         resolve(result);
       } catch (err) {
-        res.writeHead(400, { "Content-Type": "text/html; charset=utf-8", Connection: "close" });
-        res.end(page("WHOOP authorization failed", (err as Error).message));
+        if (err instanceof StateMismatchError) {
+          // Stale tab or a forged request: refuse it, but keep waiting for the real callback.
+          reply(
+            res,
+            400,
+            "Link expired",
+            "This authorization link doesn't belong to the running `whoop-mcp auth`. Use the newest tab it opened.",
+          );
+          return;
+        }
+        reply(res, 400, "WHOOP authorization failed", (err as Error).message);
         close();
         reject(err);
       }
@@ -183,14 +216,5 @@ function openInBrowser(url: string): void {
     child.unref();
   } catch {
     // The URL is already printed; opening the browser is best-effort.
-  }
-}
-
-async function promptLine(question: string): Promise<string> {
-  const rl = createInterface({ input: process.stdin, output: process.stderr });
-  try {
-    return await rl.question(question);
-  } finally {
-    rl.close();
   }
 }

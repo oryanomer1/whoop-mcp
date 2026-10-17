@@ -32,6 +32,10 @@ function whoopApi() {
         return page([recovery]);
       case "/v2/activity/sleep":
         return page([nap, sleep]);
+      case `/v2/activity/sleep/${sleep.id}`:
+        return json(sleep);
+      case `/v2/activity/workout/${workout.id}`:
+        return json(workout);
       case "/v2/activity/workout":
         return page([workout, { ...workout, id: "b0000000-0000-4000-8000-000000000000", sport_name: "cycling" }]);
       default:
@@ -162,9 +166,40 @@ describe("MCP server", () => {
 
   it("returns a tool error for invalid dates", async () => {
     const client = await connect(new WhoopClient(staticTokens, { fetch: whoopApi() }));
-    const res = await call(client, "list_cycles", { start: "last tuesday" });
-    expect(res.isError).toBe(true);
-    expect(res.text).toMatch(/Invalid start/);
+    for (const start of ["last tuesday", "2026-02-30", "2026-13-01"]) {
+      const res = await call(client, "list_cycles", { start });
+      expect(res.isError, start).toBe(true);
+      expect(res.text).toMatch(/Invalid start/);
+    }
+    const overview = await call(client, "get_daily_overview", { date: "2026-02-30" });
+    expect(overview.isError).toBe(true);
+  });
+
+  it("get_sleep and get_workout fetch one record by id", async () => {
+    const client = await connect(new WhoopClient(staticTokens, { fetch: whoopApi() }));
+
+    const s = await call(client, "get_sleep", { sleep_id: sleep.id });
+    expect(s.data).toMatchObject({ sleep_id: sleep.id, asleep_h: 7.5 });
+
+    const w = await call(client, "get_workout", { workout_id: workout.id, raw: true });
+    expect(w.data).toEqual(workout);
+
+    const bad = await call(client, "get_workout", { workout_id: "../user/access" });
+    expect(bad.isError).toBe(true);
+  });
+
+  it("get_trends keeps only the requested number of days", async () => {
+    const yesterday = { ...cycle, id: 93844, start: "2026-10-11T20:30:00.000Z", end: cycle.start };
+    const fetch = fakeFetch((url) => {
+      const path = url.pathname.replace("/developer", "");
+      if (path === "/v2/cycle") return json({ records: [cycle, yesterday], next_token: null });
+      return whoopApi()(url);
+    });
+    const client = await connect(new WhoopClient(staticTokens, { fetch }));
+
+    const { data } = await call(client, "get_trends", { days: 1 });
+
+    expect(data.days.map((d: { date: string }) => d.date)).toEqual(["2026-10-13"]);
   });
 });
 
@@ -172,7 +207,14 @@ describe("date ranges", () => {
   it("treats dates as local days and end dates as inclusive", () => {
     expect(parseBoundary("2026-10-01", "start")).toBe(new Date(2026, 9, 1).toISOString());
     expect(parseBoundary("2026-10-01", "end")).toBe(new Date(2026, 9, 2).toISOString());
+    expect(parseBoundary("2026-12-31", "end")).toBe(new Date(2027, 0, 1).toISOString());
     expect(parseBoundary("2026-10-01T08:00:00Z", "end")).toBe("2026-10-01T08:00:00.000Z");
+  });
+
+  it("rejects impossible dates instead of rolling them over", () => {
+    expect(() => parseBoundary("2026-02-30", "start")).toThrow(/no such date/);
+    expect(() => parseBoundary("2026-13-01", "start")).toThrow(/no such date/);
+    expect(new Date(parseBoundary("0050-01-01", "start")).getFullYear()).toBe(50);
   });
 
   it("supports a days shortcut and rejects inverted ranges", () => {

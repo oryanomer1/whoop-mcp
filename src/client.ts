@@ -1,4 +1,4 @@
-import { WHOOP_API_BASE, WHOOP_MAX_PAGE_SIZE } from "./config.js";
+import { REQUEST_TIMEOUT_MS, WHOOP_API_BASE, WHOOP_MAX_PAGE_SIZE } from "./config.js";
 import type {
   Cycle,
   Paginated,
@@ -8,6 +8,7 @@ import type {
   UserBodyMeasurement,
   Workout,
 } from "./types.js";
+import { errorName, sanitize, sleep } from "./util.js";
 
 export interface AccessTokenProvider {
   getAccessToken(): Promise<string>;
@@ -18,7 +19,7 @@ export class WhoopApiError extends Error {
   constructor(
     readonly status: number,
     readonly path: string,
-    readonly body: string,
+    body: string,
   ) {
     super(describeError(status, path, body));
     this.name = "WhoopApiError";
@@ -36,7 +37,7 @@ function describeError(status: number, path: string, body: string): string {
     case 429:
       return "WHOOP rate limit reached (429). Try again in a minute.";
     default:
-      return `WHOOP API error ${status} on ${path}: ${body.slice(0, 300)}`;
+      return `WHOOP API error ${status} on ${path}: ${sanitize(body, 300)}`;
   }
 }
 
@@ -60,25 +61,37 @@ export interface WhoopClientOptions {
   fetch?: typeof fetch;
   baseUrl?: string;
   maxRetries?: number;
+  timeoutMs?: number;
   sleep?: (ms: number) => Promise<void>;
+  /** Cancels in-flight and pending requests, e.g. when the MCP client cancels a tool call. */
+  signal?: AbortSignal;
 }
 
 type Query = Record<string, string | number | undefined>;
 
 export class WhoopClient {
   private readonly fetchImpl: typeof fetch;
-  private readonly baseUrl: string;
+  private readonly base: URL;
   private readonly maxRetries: number;
+  private readonly timeoutMs: number;
   private readonly sleep: (ms: number) => Promise<void>;
+  private readonly signal?: AbortSignal;
 
   constructor(
     private readonly tokens: AccessTokenProvider,
-    opts: WhoopClientOptions = {},
+    private readonly opts: WhoopClientOptions = {},
   ) {
     this.fetchImpl = opts.fetch ?? fetch;
-    this.baseUrl = opts.baseUrl ?? WHOOP_API_BASE;
+    this.base = new URL(opts.baseUrl ?? WHOOP_API_BASE);
     this.maxRetries = opts.maxRetries ?? 3;
-    this.sleep = opts.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
+    this.timeoutMs = opts.timeoutMs ?? REQUEST_TIMEOUT_MS;
+    this.sleep = opts.sleep ?? sleep;
+    this.signal = opts.signal;
+  }
+
+  /** A view of this client whose requests are cancelled by `signal`. */
+  withSignal(signal: AbortSignal | undefined): WhoopClient {
+    return signal ? new WhoopClient(this.tokens, { ...this.opts, signal }) : this;
   }
 
   getProfile(): Promise<UserBasicProfile> {
@@ -128,19 +141,25 @@ export class WhoopClient {
   /** Follows `next_token` until `limit` records are collected or the data runs out. */
   async collection<T>(path: string, q: CollectionQuery): Promise<CollectionResult<T>> {
     const want = q.limit ?? WHOOP_MAX_PAGE_SIZE;
+    // Bounded even if WHOOP returns empty pages that still carry a next_token.
+    const maxPages = Math.ceil(want / WHOOP_MAX_PAGE_SIZE) + 1;
     const records: T[] = [];
+    const seen = new Set<string>();
     let next = q.nextToken;
-    do {
-      const page = await this.get<Paginated<T>>(path, {
+    for (let page = 0; page < maxPages; page++) {
+      const res = await this.get<Paginated<T>>(path, {
         limit: Math.min(WHOOP_MAX_PAGE_SIZE, want - records.length),
         start: q.start,
         end: q.end,
         nextToken: next,
       });
-      records.push(...page.records);
-      next = page.next_token || undefined;
-    } while (next && records.length < want);
-    return { records, next_token: next ?? null };
+      records.push(...(res.records ?? []));
+      next = res.next_token || undefined;
+      if (next && seen.has(next)) next = undefined; // a repeated token would loop forever
+      if (!next || !res.records?.length || records.length >= want) break;
+      seen.add(next);
+    }
+    return { records: records.slice(0, want), next_token: next ?? null };
   }
 
   /**
@@ -148,7 +167,8 @@ export class WhoopClient {
    * POST/PUT/PATCH/DELETE path, so the server cannot modify WHOOP data.
    */
   async get<T>(path: string, query: Query = {}): Promise<T> {
-    const url = new URL(this.baseUrl + path);
+    const url = new URL(this.base.pathname.replace(/\/$/, "") + path, this.base);
+    assertReadOnlyEndpoint(url, this.base);
     for (const [key, value] of Object.entries(query)) {
       if (value !== undefined && value !== "") url.searchParams.set(key, String(value));
     }
@@ -156,34 +176,81 @@ export class WhoopClient {
     let token = await this.tokens.getAccessToken();
     let refreshed = false;
     for (let attempt = 0; ; attempt++) {
-      const res = await this.fetchImpl(url, {
-        method: "GET",
-        headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
-      });
+      this.signal?.throwIfAborted();
+      const canRetry = attempt < this.maxRetries;
+      let res: Response;
+      try {
+        res = await this.fetchImpl(url, {
+          method: "GET",
+          headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+          signal: this.requestSignal(),
+        });
+      } catch (err) {
+        if (this.signal?.aborted) throw err;
+        // Timeouts and network failures are worth another try; give up with a clear message.
+        if (canRetry) {
+          await this.sleep(backoffMs(attempt));
+          continue;
+        }
+        throw new Error(
+          errorName(err) === "TimeoutError"
+            ? `WHOOP did not respond within ${this.timeoutMs / 1000}s (${path}).`
+            : `Could not reach WHOOP (${path}): ${sanitize((err as Error).message)}`,
+        );
+      }
       if (res.status === 401 && !refreshed) {
         await res.body?.cancel();
         refreshed = true;
         token = await this.tokens.forceRefresh(token);
         continue;
       }
-      if ((res.status === 429 || res.status >= 500) && attempt < this.maxRetries) {
+      if ((res.status === 429 || res.status >= 500) && canRetry) {
         await res.body?.cancel();
         await this.sleep(retryDelayMs(res, attempt));
         continue;
       }
-      const text = await res.text();
+      let text: string;
+      try {
+        text = await res.text();
+      } catch (err) {
+        if (this.signal?.aborted) throw err;
+        if (canRetry) continue;
+        throw new Error(`WHOOP stopped responding while sending ${path}. Try again.`);
+      }
       if (!res.ok) throw new WhoopApiError(res.status, path, text);
-      return (text ? JSON.parse(text) : undefined) as T;
+      if (!text) return undefined as T;
+      try {
+        return JSON.parse(text) as T;
+      } catch {
+        throw new Error(`WHOOP returned an unexpected (non-JSON) response for ${path}.`);
+      }
     }
+  }
+
+  private requestSignal(): AbortSignal {
+    const timeout = AbortSignal.timeout(this.timeoutMs);
+    return this.signal ? AbortSignal.any([timeout, this.signal]) : timeout;
+  }
+}
+
+/** Defence in depth for the read-only guarantee: only v2 read endpoints on the WHOOP API host. */
+function assertReadOnlyEndpoint(url: URL, base: URL): void {
+  const prefix = `${base.pathname.replace(/\/$/, "")}/v2/`;
+  if (url.origin !== base.origin || !url.pathname.startsWith(prefix) || url.pathname.startsWith(`${prefix}user/access`)) {
+    throw new Error(`Refusing to request ${url.pathname}: not a read-only WHOOP endpoint.`);
   }
 }
 
 const MAX_RETRY_DELAY_MS = 30_000;
+
+function backoffMs(attempt: number): number {
+  return Math.min(500 * 2 ** attempt, MAX_RETRY_DELAY_MS);
+}
 
 function retryDelayMs(res: Response, attempt: number): number {
   for (const header of ["retry-after", "x-ratelimit-reset"]) {
     const seconds = Number(res.headers.get(header));
     if (Number.isFinite(seconds) && seconds > 0) return Math.min(seconds * 1000, MAX_RETRY_DELAY_MS);
   }
-  return Math.min(500 * 2 ** attempt, MAX_RETRY_DELAY_MS);
+  return backoffMs(attempt);
 }
