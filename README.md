@@ -142,6 +142,19 @@ args = ["-y", "@oryanomer1/whoop-mcp"]
 </details>
 
 <details>
+<summary><b>Docker</b></summary>
+
+Run `auth` on the host first (step 2), then mount the token directory:
+
+```bash
+docker build -t whoop-mcp https://github.com/oryanomer1/whoop-mcp.git
+docker run -i --rm -v ~/.config/whoop-mcp:/home/node/.config/whoop-mcp whoop-mcp
+```
+
+Use the `docker run` command as the stdio command in your MCP client.
+</details>
+
+<details>
 <summary><b>Any other MCP client</b></summary>
 
 Run `npx -y @oryanomer1/whoop-mcp` as a **stdio** server. No environment variables are needed: the client ID and secret are stored with your tokens during `auth`.
