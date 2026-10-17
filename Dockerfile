@@ -1,6 +1,6 @@
 # Builds the stdio server from source. MCP directories such as Glama use this to
 # start the server and list its tools. For everyday use, prefer
-# `npx -y @oryanomer1/whoop-mcp` (see README).
+# `npx -y @oryanomer/whoop-mcp` (see README).
 #
 # Tokens are never baked into the image. To use your account, run `whoop-mcp auth`
 # on the host, then mount the token directory:

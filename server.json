@@ -12,7 +12,7 @@
   "packages": [
     {
       "registryType": "npm",
-      "identifier": "@oryanomer1/whoop-mcp",
+      "identifier": "@oryanomer/whoop-mcp",
       "version": "1.0.0",
       "transport": {
         "type": "stdio"

@@ -16,7 +16,7 @@ body:
     id: version
     attributes:
       label: whoop-mcp version
-      description: Output of `npx -y @oryanomer1/whoop-mcp --version`
+      description: Output of `npx -y @oryanomer/whoop-mcp --version`
     validations:
       required: true
   - type: input

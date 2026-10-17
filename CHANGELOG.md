@@ -4,7 +4,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [1.0.0] - 2026-10-17
 
-First generally available release, published to npm as `@oryanomer1/whoop-mcp` and to the MCP Registry as `io.github.oryanomer1/whoop-mcp`.
+First generally available release, published to npm as `@oryanomer/whoop-mcp` and to the MCP Registry as `io.github.oryanomer1/whoop-mcp`.
 
 ### Added
 

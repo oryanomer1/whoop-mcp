@@ -1,6 +1,6 @@
 # WHOOP MCP Server (read-only)
 
-[![npm](https://img.shields.io/npm/v/@oryanomer1/whoop-mcp)](https://www.npmjs.com/package/@oryanomer1/whoop-mcp)
+[![npm](https://img.shields.io/npm/v/@oryanomer/whoop-mcp)](https://www.npmjs.com/package/@oryanomer/whoop-mcp)
 [![CI](https://github.com/oryanomer1/whoop-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/oryanomer1/whoop-mcp/actions/workflows/ci.yml)
 [![M8ven Score](https://m8ven.ai/badge/mcp/oryanomer1-whoop-mcp-1mdowe?v=6c1b13612c233c67d4fba7e0f8d10624)](https://m8ven.ai/mcp/oryanomer1-whoop-mcp-1mdowe?s=readme)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -17,8 +17,8 @@ Ask Claude, Cursor, VS Code or any [MCP](https://modelcontextprotocol.io) client
 > *"How many runs did I do this month, and what was my average strain?"*
 > *"Do I recover worse after days with strain above 15?"*
 
-[![Install in Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/install-mcp?name=whoop&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBvcnlhbm9tZXIxL3dob29wLW1jcCJdfQ%3D%3D)
-[![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_Server-0098FF?logo=visualstudiocode&logoColor=white)](https://vscode.dev/redirect/mcp/install?name=whoop&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40oryanomer1%2Fwhoop-mcp%22%5D%7D)
+[![Install in Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/install-mcp?name=whoop&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBvcnlhbm9tZXIvd2hvb3AtbWNwIl19)
+[![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_Server-0098FF?logo=visualstudiocode&logoColor=white)](https://vscode.dev/redirect/mcp/install?name=whoop&config=%7B%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40oryanomer%2Fwhoop-mcp%22%5D%7D)
 
 (Run the one-time [`auth` step](#2-connect-your-whoop-account) before or after installing.)
 
@@ -46,7 +46,7 @@ You need **Node.js 20.11+** and a WHOOP membership.
 ### 2. Connect your WHOOP account
 
 ```bash
-npx -y @oryanomer1/whoop-mcp auth
+npx -y @oryanomer/whoop-mcp auth
 ```
 
 Paste your Client ID and Client Secret when asked. The secret isn't echoed, so it stays out of your screen and shell history. Your browser then opens WHOOP's consent page. When you approve, the tokens are saved to `~/.config/whoop-mcp/tokens.json` and refreshed automatically from then on.
@@ -59,7 +59,7 @@ Paste your Client ID and Client Secret when asked. The secret isn't echoed, so i
 <summary><b>Claude Code</b></summary>
 
 ```bash
-claude mcp add whoop --scope user -- npx -y @oryanomer1/whoop-mcp
+claude mcp add whoop --scope user -- npx -y @oryanomer/whoop-mcp
 ```
 </details>
 
@@ -75,13 +75,13 @@ claude mcp add whoop --scope user -- npx -y @oryanomer1/whoop-mcp
   "mcpServers": {
     "whoop": {
       "command": "npx",
-      "args": ["-y", "@oryanomer1/whoop-mcp"]
+      "args": ["-y", "@oryanomer/whoop-mcp"]
     }
   }
 }
 ```
 
-Restart Claude Desktop. On Windows, if the server doesn't start, use `"command": "cmd"` and `"args": ["/c", "npx", "-y", "@oryanomer1/whoop-mcp"]`.
+Restart Claude Desktop. On Windows, if the server doesn't start, use `"command": "cmd"` and `"args": ["/c", "npx", "-y", "@oryanomer/whoop-mcp"]`.
 </details>
 
 <details>
@@ -94,7 +94,7 @@ Click the **Install in Cursor** button above, or add this to `~/.cursor/mcp.json
   "mcpServers": {
     "whoop": {
       "command": "npx",
-      "args": ["-y", "@oryanomer1/whoop-mcp"]
+      "args": ["-y", "@oryanomer/whoop-mcp"]
     }
   }
 }
@@ -112,7 +112,7 @@ Click the **Install in VS Code** button above, or add this to `.vscode/mcp.json`
     "whoop": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@oryanomer1/whoop-mcp"]
+      "args": ["-y", "@oryanomer/whoop-mcp"]
     }
   }
 }
@@ -129,7 +129,7 @@ Add this to `~/.codeium/windsurf/mcp_config.json`:
   "mcpServers": {
     "whoop": {
       "command": "npx",
-      "args": ["-y", "@oryanomer1/whoop-mcp"]
+      "args": ["-y", "@oryanomer/whoop-mcp"]
     }
   }
 }
@@ -144,7 +144,7 @@ Add this to `~/.codex/config.toml`:
 ```toml
 [mcp_servers.whoop]
 command = "npx"
-args = ["-y", "@oryanomer1/whoop-mcp"]
+args = ["-y", "@oryanomer/whoop-mcp"]
 ```
 </details>
 
@@ -164,7 +164,7 @@ Use the `docker run` command as the stdio command in your MCP client.
 <details>
 <summary><b>Any other MCP client</b></summary>
 
-Run `npx -y @oryanomer1/whoop-mcp` as a **stdio** server. No environment variables are needed: the client ID and secret are stored with your tokens during `auth`.
+Run `npx -y @oryanomer/whoop-mcp` as a **stdio** server. No environment variables are needed: the client ID and secret are stored with your tokens during `auth`.
 </details>
 
 Then ask: *"Give me my WHOOP overview for today."*
@@ -200,7 +200,7 @@ whoop-mcp logout     Delete the locally stored tokens
 whoop-mcp --version
 ```
 
-All commands run via `npx -y @oryanomer1/whoop-mcp <command>`, or install globally with `npm install -g @oryanomer1/whoop-mcp`.
+All commands run via `npx -y @oryanomer/whoop-mcp <command>`, or install globally with `npm install -g @oryanomer/whoop-mcp`.
 
 ## Privacy and security
 
@@ -228,18 +228,18 @@ The full threat model is in [SECURITY.md](SECURITY.md). Please report vulnerabil
 | Tool error `WHOOP rejected the refresh token` | Run `auth` again. This happens if the app's secret was rotated, access was revoked, or the token file was copied to another machine and used there. Run `auth` on each machine instead of copying tokens. |
 | Tool error `403 ... missing a scope` | Enable all `read:*` scopes on your WHOOP app, then run `auth` again. |
 | Values missing, `score_state: PENDING_SCORE` | WHOOP hasn't finished scoring that sleep, recovery or workout. Ask again later. |
-| The server doesn't appear in the client | Run `npx -y @oryanomer1/whoop-mcp --version` in a terminal to check Node and npx, then restart the client. The first start downloads the package and can take a few seconds. |
+| The server doesn't appear in the client | Run `npx -y @oryanomer/whoop-mcp --version` in a terminal to check Node and npx, then restart the client. The first start downloads the package and can take a few seconds. |
 
 Check the connection at any time:
 
 ```bash
-npx -y @oryanomer1/whoop-mcp status
+npx -y @oryanomer/whoop-mcp status
 ```
 
 ## Uninstall
 
 ```bash
-npx -y @oryanomer1/whoop-mcp logout
+npx -y @oryanomer/whoop-mcp logout
 ```
 
 Then remove the `whoop` entry from your MCP client's config, and delete the app in the WHOOP Developer Dashboard if you no longer need it.
