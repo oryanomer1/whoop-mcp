@@ -216,6 +216,7 @@ The full threat model is in [SECURITY.md](SECURITY.md). Please report vulnerabil
 
 | Symptom | Fix |
 | --- | --- |
+| WHOOP's sign-in page shows `400 Bad Request: Request Header Or Cookie Too Large` | Your browser has too many `whoop.com` cookies. Copy the link that `auth` prints into a private/incognito window, or clear cookies for `whoop.com`, then try again. |
 | WHOOP shows an error about the redirect URI | The redirect URI on your WHOOP app must match `WHOOP_REDIRECT_URI` exactly, including `http://`, the port and `/callback`, with no trailing slash or spaces. |
 | `Port 8787 is in use` | Register another URI on your app (e.g. `http://localhost:9876/callback`) and run `auth` with `WHOOP_REDIRECT_URI` set to it. |
 | Tool error `Not connected to WHOOP` | Run the `auth` step. If your client runs as a different user or with a different `HOME`, set `WHOOP_TOKEN_PATH` in the client config to your token file. |
