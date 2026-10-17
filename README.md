@@ -7,6 +7,11 @@
 
 Ask Claude, Cursor, VS Code or any [MCP](https://modelcontextprotocol.io) client about your [WHOOP](https://www.whoop.com) recovery, HRV, sleep, strain and workouts, without giving it any way to change your data.
 
+<p align="center">
+  <img src="docs/demo.svg" alt="Claude answering 'Why is my recovery low today?' with whoop-mcp: it calls get_daily_overview, notes the recovery is actually 76% (green), and explains the short sleep, low consistency and REM against solid HRV and resting heart rate." width="760">
+</p>
+<p align="center"><sub>A real answer from real WHOOP data, recorded with <code>npm run demo</code>.</sub></p>
+
 > *"How did I sleep last night, and why is my recovery only 41% today?"*
 > *"Compare my HRV and resting heart rate over the last 30 days."*
 > *"How many runs did I do this month, and what was my average strain?"*

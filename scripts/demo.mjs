@@ -42,7 +42,8 @@ if (from) {
   const events = out.trim().split("\n").map((line) => JSON.parse(line));
   const tools = events
     .filter((e) => e.type === "assistant")
-    .flatMap((e) => e.message.content.filter((c) => c.type === "tool_use").map((c) => c.name.replace(/^mcp__whoop__/, "")));
+    .flatMap((e) => e.message.content.filter((c) => c.type === "tool_use" && c.name.startsWith("mcp__whoop__")))
+    .map((c) => c.name.replace(/^mcp__whoop__/, ""));
   const result = events.find((e) => e.type === "result");
   if (!result || result.is_error) throw new Error(`Claude run failed: ${JSON.stringify(result)}`);
   transcript = { question, tools, answer: result.result };
