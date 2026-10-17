@@ -1,5 +1,5 @@
 // Records a real Claude answer that uses this server, and renders it as docs/demo.svg
-// (an animated chat card that GitHub plays inline in the README).
+// (an animated chat card that GitHub plays inline in the README; static where animation is off).
 //
 //   npm run build && node scripts/demo.mjs ["Why is my recovery low today?"]
 //   node scripts/demo.mjs --from build/demo-transcript.json   # re-render without asking again
@@ -124,15 +124,15 @@ function render({ question, tools, answer }) {
   }
 
   const H = y + PAD;
-  const cycle = t + 6; // hold the finished answer, then loop
-  const pct = (s) => ((s / cycle) * 100).toFixed(2);
-  const css = items
-    .map(
-      (item, i) =>
-        `@keyframes k${i}{0%,${pct(item.at)}%{opacity:0;transform:translateY(6px)}${pct(item.at + 0.35)}%,96%{opacity:1;transform:none}100%{opacity:0}}` +
-        `.i${i}{animation:k${i} ${cycle.toFixed(2)}s infinite;opacity:0}`,
-    )
-    .join("");
+  // Each loop opens on the finished answer (so the first frame, which viewers that don't
+  // animate show, is complete), fades it out, then replays the exchange line by line.
+  const HOLD = 6;
+  const FADE = 0.4;
+  const start = HOLD + FADE + 0.3;
+  const cycle = start + t + 1.5;
+  const frac = (s) => (s / cycle).toFixed(4);
+  const reveal = (at) =>
+    `<animate attributeName="opacity" values="1;1;0;0;1;1" keyTimes="0;${frac(HOLD)};${frac(HOLD + FADE)};${frac(start + at)};${frac(start + at + 0.35)};1" dur="${cycle.toFixed(2)}s" repeatCount="indefinite"/>`;
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Claude answering ${esc(question)} using whoop-mcp">
 <style>
@@ -140,13 +140,11 @@ text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,san
 .card{fill:#0d1117;stroke:#30363d}.title{fill:#8b949e;font-size:12px}
 .user{fill:#1f6feb}.utext{fill:#fff}.chip{fill:#161b22;stroke:#30363d}.ctext{fill:#7ee787;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px}
 .atext{fill:#e6edf3}
-${css}
-@media (prefers-reduced-motion:reduce){[class^="i"]{animation:none!important;opacity:1!important}}
 </style>
 <rect x="0.5" y="0.5" width="${W - 1}" height="${H - 1}" rx="12" class="card"/>
 <circle cx="24" cy="24" r="6" fill="#ff5f57"/><circle cx="44" cy="24" r="6" fill="#febc2e"/><circle cx="64" cy="24" r="6" fill="#28c840"/>
 <text x="${W / 2}" y="28" text-anchor="middle" class="title">Claude + whoop-mcp (read-only)</text>
-${items.map((item, i) => `<g class="i${i}">${item.svg}</g>`).join("\n")}
+${items.map((item) => `<g>${reveal(item.at)}${item.svg}</g>`).join("\n")}
 </svg>
 `;
 }
