@@ -48,7 +48,8 @@
     "version": "node scripts/sync-server-json.mjs && git add server.json",
     "prebuild": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
     "smoke:live": "npm run build && node scripts/live-smoke.mjs",
-    "bundle": "node scripts/build-mcpb.mjs"
+    "bundle": "node scripts/build-mcpb.mjs",
+    "demo": "npm run build && node scripts/demo.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.1",
