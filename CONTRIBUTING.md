@@ -27,6 +27,10 @@ To try your changes against your own WHOOP account, connect once with `node dist
 - `npm run smoke:live` calls every tool against your real account, and forces one token refresh, printing only pass/fail and record counts.
 - Point your MCP client at `node /path/to/whoop-mcp/dist/index.js` to try it in a conversation.
 
+## Licensing of contributions
+
+By submitting a contribution, you agree that it is licensed under the project's [MIT License](LICENSE). Contributions must keep the [Terms of Use (EULA)](EULA.md) and [Privacy Policy](PRIVACY.md) accurate: if a change affects what data is read, stored or sent, update those documents in the same pull request.
+
 ## Pull requests
 
 1. Open an issue first for anything bigger than a small fix, so we can agree on the approach.

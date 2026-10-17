@@ -2,7 +2,7 @@
 
 **Effective date:** October 17, 2026
 
-This policy explains how **whoop-mcp** (the open-source software at [github.com/oryanomer1/whoop-mcp](https://github.com/oryanomer1/whoop-mcp), published on npm as `@oryanomer/whoop-mcp`) handles your information. whoop-mcp is maintained by Oryan Omer as an independent project. It is not affiliated with or endorsed by WHOOP, Inc.
+This policy explains how **whoop-mcp** (the open-source software at [github.com/oryanomer1/whoop-mcp](https://github.com/oryanomer1/whoop-mcp), published on npm as `@oryanomer/whoop-mcp`) handles your information. whoop-mcp is maintained by Oryan Omer as an independent project. It is not affiliated with or endorsed by WHOOP, Inc. Your use of whoop-mcp is also subject to the [Terms of Use (EULA)](EULA.md).
 
 ## Summary
 

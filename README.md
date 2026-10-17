@@ -54,6 +54,8 @@ Paste your Client ID and Client Secret when asked. The secret isn't echoed, so i
 
 (For scripts, you can set `WHOOP_CLIENT_ID` and `WHOOP_CLIENT_SECRET` in the environment instead of answering the prompts.)
 
+By connecting, you agree to the [Terms of Use (EULA)](EULA.md) and to WHOOP's [API Terms of Use](https://developer.whoop.com/api-terms-of-use/). See the [Privacy Policy](PRIVACY.md) for how your data is handled.
+
 ### 3. Add it to your MCP client
 
 <details open>
@@ -251,14 +253,11 @@ Then remove the `whoop` entry from your MCP client's config, and delete the app 
 
 Issues and pull requests are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md). The one hard rule: whoop-mcp stays read-only. Release notes are in [CHANGELOG.md](CHANGELOG.md).
 
-## Privacy policy
+## Legal
 
-See [PRIVACY.md](PRIVACY.md).
-
-## Disclaimer
+- **License:** [MIT](LICENSE) © Oryan Omer
+- **Terms of use (EULA):** [EULA.md](EULA.md). By installing or using whoop-mcp you agree to these terms.
+- **Privacy policy:** [PRIVACY.md](PRIVACY.md)
+- **Security policy:** [SECURITY.md](SECURITY.md)
 
 This is an unofficial project, not affiliated with or endorsed by WHOOP, Inc. "WHOOP" is a trademark of WHOOP, Inc. Nothing here is medical advice.
-
-## License
-
-[MIT](LICENSE) © Oryan Omer

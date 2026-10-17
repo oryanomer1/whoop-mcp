@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/).
 
+## [1.0.3] - 2026-10-17
+
+### Added
+
+- [Terms of Use (EULA)](EULA.md), linked from the README, Privacy Policy, CONTRIBUTING.md and the Claude Desktop / Smithery bundle.
+
 ## [1.0.2] - 2026-10-17
 
 ### Added
@@ -32,6 +38,7 @@ First generally available release, published to npm as `@oryanomer/whoop-mcp`.
 - Hardened OAuth callback: forged or stale callbacks are refused without aborting the login, and malformed requests are handled.
 - Unit, MCP integration, end-to-end (subprocess) and packaging tests, with coverage thresholds; CI on Linux, macOS and Windows with Node 20, 22 and 24.
 
+[1.0.3]: https://github.com/oryanomer1/whoop-mcp/releases/tag/v1.0.3
 [1.0.2]: https://github.com/oryanomer1/whoop-mcp/releases/tag/v1.0.2
 [1.0.1]: https://github.com/oryanomer1/whoop-mcp/releases/tag/v1.0.1
 [1.0.0]: https://www.npmjs.com/package/@oryanomer/whoop-mcp/v/1.0.0
